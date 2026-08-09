@@ -5,7 +5,8 @@ use crate::spec::Spec;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-pub const DESCRIBE_SYSTEM: &str = "You are a reviewer summarizing marketing content. Do not invent content that isn't there. \
+pub const DESCRIBE_SYSTEM: &str =
+    "You are a reviewer summarizing marketing content. Do not invent content that isn't there. \
 Respond strictly in the specified JSON schema only.";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,7 +30,9 @@ pub fn run(llm: &Llm, spec: &Spec, input: &Input) -> Result<Describe> {
          \"labels\":[\"tags describing the content's nature\"],\
          \"can_be_split\":true or false (whether the material can be split by channel/target),\
          \"can_be_split_note\":\"rationale\"}\n";
-    let v = llm.json_ctx(Some(&ctx), task, Some(DESCRIBE_SYSTEM)).context("describe failed")?;
+    let v = llm
+        .json_ctx(Some(&ctx), task, Some(DESCRIBE_SYSTEM))
+        .context("describe failed")?;
     serde_json::from_value(v).context("describe JSON schema mismatch")
 }
 

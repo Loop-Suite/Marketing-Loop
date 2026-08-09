@@ -76,12 +76,12 @@ pub fn normalize(
     let deterministic_results = match deterministic_results_path {
         None => None,
         Some(p) => {
-            let s = std::fs::read_to_string(p)
-                .with_context(|| format!("Failed to read deterministic result file: {}", p.display()))?;
-            Some(
-                serde_json::from_str(&s)
-                    .with_context(|| format!("Failed to parse deterministic result JSON: {}", p.display()))?,
-            )
+            let s = std::fs::read_to_string(p).with_context(|| {
+                format!("Failed to read deterministic result file: {}", p.display())
+            })?;
+            Some(serde_json::from_str(&s).with_context(|| {
+                format!("Failed to parse deterministic result JSON: {}", p.display())
+            })?)
         }
     };
 

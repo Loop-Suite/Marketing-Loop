@@ -19,13 +19,26 @@ pub struct GoodThing {
 }
 
 /// Rewrites confirmed findings and good things in the tone of a human-written review comment.
-pub fn rewrite(llm: &Llm, spec: &Spec, input: &Input, confirmed: &[&Finding], good_things: &[GoodThing]) -> Result<String> {
+pub fn rewrite(
+    llm: &Llm,
+    spec: &Spec,
+    input: &Input,
+    confirmed: &[&Finding],
+    good_things: &[GoodThing],
+) -> Result<String> {
     if confirmed.is_empty() && good_things.is_empty() {
-        return Ok("(No confirmed findings or good things — skipping human-voice rewrite)".to_string());
+        return Ok(
+            "(No confirmed findings or good things — skipping human-voice rewrite)".to_string(),
+        );
     }
     let findings_text = confirmed
         .iter()
-        .map(|f| format!("- [{}] {} {} (evidence: {})", f.severity, f.block_ref, f.claim, f.evidence))
+        .map(|f| {
+            format!(
+                "- [{}] {} {} (evidence: {})",
+                f.severity, f.block_ref, f.claim, f.evidence
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n");
     let good_text = good_things
@@ -45,5 +58,6 @@ pub fn rewrite(llm: &Llm, spec: &Spec, input: &Input, confirmed: &[&Finding], go
         findings_text = if findings_text.is_empty() { "(none)".to_string() } else { findings_text },
         good_text = if good_text.is_empty() { "(none)".to_string() } else { good_text },
     );
-    llm.text_ctx(Some(&ctx), &task, Some(HUMANVOICE_SYSTEM)).context("human-voice rewrite failed")
+    llm.text_ctx(Some(&ctx), &task, Some(HUMANVOICE_SYSTEM))
+        .context("human-voice rewrite failed")
 }

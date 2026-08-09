@@ -23,7 +23,12 @@ struct RequirementsOutput {
 }
 
 /// Returns None if requirements (campaign/creative brief) aren't provided (nothing to verify).
-pub fn verify(llm: &Llm, spec: &Spec, input: &Input, confirmed: &[&Finding]) -> Result<Option<Vec<RequirementCheck>>> {
+pub fn verify(
+    llm: &Llm,
+    spec: &Spec,
+    input: &Input,
+    confirmed: &[&Finding],
+) -> Result<Option<Vec<RequirementCheck>>> {
     if input.requirements.is_none() {
         return Ok(None);
     }
@@ -43,7 +48,9 @@ pub fn verify(llm: &Llm, spec: &Spec, input: &Input, confirmed: &[&Finding]) -> 
          \"evidence\":\"block_ref evidence, or reason for missing/ambiguous\"}}]}}\n",
         fs = if findings_summary.is_empty() { "(none)".to_string() } else { findings_summary },
     );
-    let v = llm.json_ctx(Some(&ctx), &task, Some(REQ_SYSTEM)).context("Requirements verification failed")?;
+    let v = llm
+        .json_ctx(Some(&ctx), &task, Some(REQ_SYSTEM))
+        .context("Requirements verification failed")?;
     let out: RequirementsOutput =
         serde_json::from_value(v).context("Requirements verification JSON schema mismatch")?;
     Ok(Some(out.checks))

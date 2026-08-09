@@ -23,7 +23,11 @@ pub fn write(out_dir: &Path, state: &State) -> Result<()> {
 }
 
 pub fn load(path: &Path) -> Result<State> {
-    let s = std::fs::read_to_string(path)
-        .with_context(|| format!("Failed to read {} (--prior is the state.json from a previous --out directory)", path.display()))?;
+    let s = std::fs::read_to_string(path).with_context(|| {
+        format!(
+            "Failed to read {} (--prior is the state.json from a previous --out directory)",
+            path.display()
+        )
+    })?;
     serde_json::from_str(&s).with_context(|| format!("Failed to parse {}", path.display()))
 }

@@ -12,7 +12,8 @@ pub fn run_local_checks(input: &Input, spec: &Spec) -> serde_json::Value {
     let (lc_status, lc_evidence) = legal_claim_scan(&input.content);
     let (rs_status, rs_evidence) = readability_score(&input.content);
     let (bk_status, bk_evidence) = brand_keyword_match(&input.content, &spec.required_brand_terms);
-    let (ts_status, ts_evidence) = trademark_symbol_check(&input.content, &spec.required_brand_terms);
+    let (ts_status, ts_evidence) =
+        trademark_symbol_check(&input.content, &spec.required_brand_terms);
 
     serde_json::json!({
         "banned_words": {"status": bw_status, "evidence": bw_evidence},
@@ -29,11 +30,21 @@ pub fn run_local_checks(input: &Input, spec: &Spec) -> serde_json::Value {
 /// phrases the check matches against real-world Korean-language ad copy, not translatable text.
 fn banned_words(content: &str) -> (&'static str, String) {
     const BANNED: &[&str] = &["최고", "무조건", "100% 보장", "업계 1위", "완벽한", "절대"];
-    let hits: Vec<&str> = BANNED.iter().copied().filter(|w| content.contains(w)).collect();
+    let hits: Vec<&str> = BANNED
+        .iter()
+        .copied()
+        .filter(|w| content.contains(w))
+        .collect();
     if hits.is_empty() {
-        ("PASS", "No banned words/exaggerated superlatives detected".to_string())
+        (
+            "PASS",
+            "No banned words/exaggerated superlatives detected".to_string(),
+        )
     } else {
-        ("FAIL", format!("Banned words detected: {}", hits.join(", ")))
+        (
+            "FAIL",
+            format!("Banned words detected: {}", hits.join(", ")),
+        )
     }
 }
 
@@ -41,12 +52,32 @@ fn banned_words(content: &str) -> (&'static str, String) {
 /// NOTE: the phrase list below is intentionally kept in Korean — these are the literal Korean
 /// phrases the check matches against real-world Korean-language ad copy, not translatable text.
 fn legal_claim_scan(content: &str) -> (&'static str, String) {
-    const CLAIMS: &[&str] = &["완치", "치료 효과", "부작용 없음", "원금 보장", "고수익 보장", "확실한 효과"];
-    let hits: Vec<&str> = CLAIMS.iter().copied().filter(|w| content.contains(w)).collect();
+    const CLAIMS: &[&str] = &[
+        "완치",
+        "치료 효과",
+        "부작용 없음",
+        "원금 보장",
+        "고수익 보장",
+        "확실한 효과",
+    ];
+    let hits: Vec<&str> = CLAIMS
+        .iter()
+        .copied()
+        .filter(|w| content.contains(w))
+        .collect();
     if hits.is_empty() {
-        ("PASS", "No absolute medical/financial efficacy claims detected".to_string())
+        (
+            "PASS",
+            "No absolute medical/financial efficacy claims detected".to_string(),
+        )
     } else {
-        ("FAIL", format!("Absolute efficacy/financial claims detected: {}", hits.join(", ")))
+        (
+            "FAIL",
+            format!(
+                "Absolute efficacy/financial claims detected: {}",
+                hits.join(", ")
+            ),
+        )
     }
 }
 
@@ -66,7 +97,10 @@ fn readability_score(content: &str) -> (&'static str, String) {
     } else if avg <= 30.0 {
         ("WARN", "Average words per sentence is somewhat long")
     } else {
-        ("FAIL", "Average words per sentence is excessive — readability may suffer")
+        (
+            "FAIL",
+            "Average words per sentence is excessive — readability may suffer",
+        )
     };
     (status, format!("{note} (avg {avg:.1} words/sentence, {word_count} words / {sentence_count} sentences total)"))
 }
@@ -74,13 +108,23 @@ fn readability_score(content: &str) -> (&'static str, String) {
 /// Checks whether spec.required_brand_terms are all present in the content.
 fn brand_keyword_match(content: &str, required: &[String]) -> (&'static str, String) {
     if required.is_empty() {
-        return ("PASS", "spec.required_brand_terms not configured".to_string());
+        return (
+            "PASS",
+            "spec.required_brand_terms not configured".to_string(),
+        );
     }
-    let missing: Vec<&str> = required.iter().map(|s| s.as_str()).filter(|t| !content.contains(t)).collect();
+    let missing: Vec<&str> = required
+        .iter()
+        .map(|s| s.as_str())
+        .filter(|t| !content.contains(t))
+        .collect();
     if missing.is_empty() {
         ("PASS", "All required brand keywords present".to_string())
     } else {
-        ("FAIL", format!("Missing required brand keywords: {}", missing.join(", ")))
+        (
+            "FAIL",
+            format!("Missing required brand keywords: {}", missing.join(", ")),
+        )
     }
 }
 
@@ -88,11 +132,17 @@ fn brand_keyword_match(content: &str, required: &[String]) -> (&'static str, Str
 /// Assumption: doesn't verify which brand term the mark should be attached to (position-agnostic, presence only).
 fn trademark_symbol_check(content: &str, required: &[String]) -> (&'static str, String) {
     if required.is_empty() {
-        return ("PASS", "spec.required_brand_terms not configured".to_string());
+        return (
+            "PASS",
+            "spec.required_brand_terms not configured".to_string(),
+        );
     }
     if content.contains('®') || content.contains('™') {
         ("PASS", "®/™ mark confirmed".to_string())
     } else {
-        ("WARN", "No ®/™ mark on brand/product name — please check".to_string())
+        (
+            "WARN",
+            "No ®/™ mark on brand/product name — please check".to_string(),
+        )
     }
 }

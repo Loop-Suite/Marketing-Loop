@@ -7,7 +7,10 @@ pub fn shared_context(spec: &Spec, input: &Input) -> String {
     let mut c = String::new();
     c.push_str(&format!("## Campaign context\n{}\n\n", spec.context));
     if let Some(conv) = &input.conventions {
-        c.push_str(&format!("## Brand guide (verbatim, takes precedence after explicit requirements)\n{}\n\n", conv));
+        c.push_str(&format!(
+            "## Brand guide (verbatim, takes precedence after explicit requirements)\n{}\n\n",
+            conv
+        ));
     }
     if let Some(req) = &input.requirements {
         c.push_str(&format!("## Requirements\n{}\n\n", req));

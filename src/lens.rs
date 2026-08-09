@@ -55,7 +55,10 @@ pub fn select_lenses(llm: &Llm, spec: &Spec) -> Result<Vec<Lens>> {
             } else {
                 format!("{} ({})", l.title, l.persona_name)
             };
-            format!("- id=\"{}\" | {} — selection signal: {}", l.id, who, l.signal)
+            format!(
+                "- id=\"{}\" | {} — selection signal: {}",
+                l.id, who, l.signal
+            )
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -73,13 +76,20 @@ pub fn select_lenses(llm: &Llm, spec: &Spec) -> Result<Vec<Lens>> {
     let selected: Vec<String> = v
         .get("selected")
         .and_then(|s| s.as_array())
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                .collect()
+        })
         .unwrap_or_default();
     let valid: Vec<Lens> = selected
         .into_iter()
         .filter_map(|id| spec.lens_by_id(&id).cloned())
         .collect();
-    anyhow::ensure!(!valid.is_empty(), "Lens selection result is empty, or contains only ids not in the spec");
+    anyhow::ensure!(
+        !valid.is_empty(),
+        "Lens selection result is empty, or contains only ids not in the spec"
+    );
     Ok(valid)
 }
 
@@ -128,16 +138,26 @@ fn build_review_task(spec: &Spec, lens: &Lens) -> String {
 /// Independent review from a single lens (persona) perspective. Doesn't reference other lenses' results.
 /// ctx is built once in review_all via shared_context(spec, input) and shared across lenses,
 /// so input isn't used directly here (signature kept fixed, left as room to extend for e.g. future block-level validation).
-pub fn review_lens(llm: &Llm, spec: &Spec, lens: &Lens, input: &Input, ctx: &str) -> Result<Vec<Finding>> {
+pub fn review_lens(
+    llm: &Llm,
+    spec: &Spec,
+    lens: &Lens,
+    input: &Input,
+    ctx: &str,
+) -> Result<Vec<Finding>> {
     let _ = input;
     let task = build_review_task(spec, lens);
     let system = persona_system(lens);
     let v = llm
         .json_ctx(Some(ctx), &task, Some(&system))
         .with_context(|| format!("Lens review failed: {}", lens.id))?;
-    let out: LensOutput =
-        serde_json::from_value(v).with_context(|| format!("Lens review JSON schema mismatch: {}", lens.id))?;
-    let persona = if lens.persona_name.is_empty() { lens.title.clone() } else { lens.persona_name.clone() };
+    let out: LensOutput = serde_json::from_value(v)
+        .with_context(|| format!("Lens review JSON schema mismatch: {}", lens.id))?;
+    let persona = if lens.persona_name.is_empty() {
+        lens.title.clone()
+    } else {
+        lens.persona_name.clone()
+    };
     let findings = out
         .findings
         .into_iter()
@@ -160,7 +180,13 @@ pub fn review_lens(llm: &Llm, spec: &Spec, lens: &Lens, input: &Input, ctx: &str
 
 /// Groups multiple lenses into threads up to `concurrency` and runs them in sequence (chunk-wise barrier). Counterpart to the original main.rs::par_map.
 /// ctx (campaign context, brand guide, requirements, content) is identical for every lens, so it's built once and shared.
-pub fn review_all(llm: &Llm, spec: &Spec, lenses: &[Lens], input: &Input, concurrency: usize) -> Result<Vec<Finding>> {
+pub fn review_all(
+    llm: &Llm,
+    spec: &Spec,
+    lenses: &[Lens],
+    input: &Input,
+    concurrency: usize,
+) -> Result<Vec<Finding>> {
     let ctx = shared_context(spec, input);
     let c = concurrency.max(1);
     let mut out: Vec<Finding> = Vec::new();
@@ -175,7 +201,11 @@ pub fn review_all(llm: &Llm, spec: &Spec, lenses: &[Lens], input: &Input, concur
                 .collect();
             handles
                 .into_iter()
-                .map(|h| h.join().map_err(|_| anyhow!("worker thread panicked")).and_then(|r| r))
+                .map(|h| {
+                    h.join()
+                        .map_err(|_| anyhow!("worker thread panicked"))
+                        .and_then(|r| r)
+                })
                 .collect()
         });
         for r in results {

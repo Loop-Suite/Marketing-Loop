@@ -36,14 +36,20 @@ pub fn verdict(
     if confirmed.iter().any(|f| f.severity == "P0") {
         return "REQUEST_CHANGES".to_string();
     }
-    if policies.iter().any(|p| p.status == policy::PolicyStatus::Fail) {
+    if policies
+        .iter()
+        .any(|p| p.status == policy::PolicyStatus::Fail)
+    {
         return "REQUEST_CHANGES".to_string();
     }
     if confirmed.iter().any(|f| f.severity == "P1") {
         return "COMMENT".to_string();
     }
     if let Some(reqs) = requirements {
-        if reqs.iter().any(|r| r.status == "MISSING" || r.status == "AMBIGUOUS") {
+        if reqs
+            .iter()
+            .any(|r| r.status == "MISSING" || r.status == "AMBIGUOUS")
+        {
             return "NEEDS_CONTEXT".to_string();
         }
     }

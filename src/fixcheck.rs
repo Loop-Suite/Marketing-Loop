@@ -46,7 +46,10 @@ pub fn run(llm: &Llm, spec: &Spec, prior_confirmed: &[&Finding]) -> Result<Vec<F
          {{\"results\":[{{\"finding_id\":\"...\",\"status\":\"FIXED|STILL_OPEN|UNKNOWN\",\"evidence\":\"...\"}}]}}\n",
         list = list
     );
-    let v = llm.json_ctx(Some(&ctx), &task, Some(FIXCHECK_SYSTEM)).context("fix check failed")?;
-    let out: FixCheckOutput = serde_json::from_value(v).context("fix check JSON schema mismatch")?;
+    let v = llm
+        .json_ctx(Some(&ctx), &task, Some(FIXCHECK_SYSTEM))
+        .context("fix check failed")?;
+    let out: FixCheckOutput =
+        serde_json::from_value(v).context("fix check JSON schema mismatch")?;
     Ok(out.results)
 }

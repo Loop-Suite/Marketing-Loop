@@ -172,15 +172,56 @@ fn main() -> Result<()> {
             prior,
             *human_voice,
         ),
-        Commands::Describe { spec, content, content_type, requirements, conventions, out } => {
-            run_describe(&llm, spec, content, content_type, requirements, conventions, out)
-        }
-        Commands::Improve { spec, content, content_type, requirements, conventions, out } => {
-            run_improve(&llm, spec, content, content_type, requirements, conventions, out)
-        }
-        Commands::Ask { spec, content, content_type, requirements, conventions, out, question } => {
-            run_ask(&llm, spec, content, content_type, requirements, conventions, out, question)
-        }
+        Commands::Describe {
+            spec,
+            content,
+            content_type,
+            requirements,
+            conventions,
+            out,
+        } => run_describe(
+            &llm,
+            spec,
+            content,
+            content_type,
+            requirements,
+            conventions,
+            out,
+        ),
+        Commands::Improve {
+            spec,
+            content,
+            content_type,
+            requirements,
+            conventions,
+            out,
+        } => run_improve(
+            &llm,
+            spec,
+            content,
+            content_type,
+            requirements,
+            conventions,
+            out,
+        ),
+        Commands::Ask {
+            spec,
+            content,
+            content_type,
+            requirements,
+            conventions,
+            out,
+            question,
+        } => run_ask(
+            &llm,
+            spec,
+            content,
+            content_type,
+            requirements,
+            conventions,
+            out,
+            question,
+        ),
     }
 }
 
@@ -191,8 +232,20 @@ fn build_llm(cli: &Cli) -> Result<(Llm, Llm)> {
     let cheap_model = cli.cheap_model.clone().or_else(|| cli.model.clone());
     let (main_llm, cheap_llm) = match cli.backend {
         Backend::ClaudeCli => (
-            Llm::claude_cli(cli.claude_bin.clone(), cli.model.clone(), cli.retries, cli.verbose, usage.clone()),
-            Llm::claude_cli(cli.claude_bin.clone(), cheap_model, cli.retries, cli.verbose, usage.clone()),
+            Llm::claude_cli(
+                cli.claude_bin.clone(),
+                cli.model.clone(),
+                cli.retries,
+                cli.verbose,
+                usage.clone(),
+            ),
+            Llm::claude_cli(
+                cli.claude_bin.clone(),
+                cheap_model,
+                cli.retries,
+                cli.verbose,
+                usage.clone(),
+            ),
         ),
         Backend::Openrouter => (
             Llm::openrouter(cli.model.clone(), cli.retries, cli.verbose, usage.clone())?,
@@ -233,7 +286,11 @@ fn run_review(
     // LLM select, then force-add the always lenses.
     let mut selected: Vec<Lens> = match lenses_arg {
         Some(s) => {
-            let ids: Vec<String> = s.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect();
+            let ids: Vec<String> = s
+                .split(',')
+                .map(|x| x.trim().to_string())
+                .filter(|x| !x.is_empty())
+                .collect();
             let mut selected = Vec::with_capacity(ids.len());
             for id in &ids {
                 let lens = sp
@@ -250,7 +307,14 @@ fn run_review(
             selected.push(l.clone());
         }
     }
-    println!("Selected lenses: {}", selected.iter().map(|l| l.id.as_str()).collect::<Vec<_>>().join(", "));
+    println!(
+        "Selected lenses: {}",
+        selected
+            .iter()
+            .map(|l| l.id.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
 
     // Independent per-lens review (review_all internally runs thread chunks up to concurrency)
     let mut findings: Vec<Finding> = lens::review_all(llm, &sp, &selected, &inp, concurrency)?;
@@ -292,7 +356,12 @@ fn run_review(
             let prior_confirmed: Vec<&Finding> = ps
                 .findings
                 .iter()
-                .filter(|f| ps.resolved.get(&f.id).map(|r| r.status == "CONFIRMED").unwrap_or(false))
+                .filter(|f| {
+                    ps.resolved
+                        .get(&f.id)
+                        .map(|r| r.status == "CONFIRMED")
+                        .unwrap_or(false)
+                })
                 .collect();
             let fr = fixcheck::run(cheap_llm, &sp, &prior_confirmed)?;
             for item in &fr {
@@ -303,7 +372,10 @@ fn run_review(
                             orig.id.clone(),
                             discourse::Resolution {
                                 status: "CONFIRMED".to_string(),
-                                evidence: format!("Unresolved from previous round (re-confirmed): {}", item.evidence),
+                                evidence: format!(
+                                    "Unresolved from previous round (re-confirmed): {}",
+                                    item.evidence
+                                ),
                             },
                         );
                     }
@@ -322,12 +394,21 @@ fn run_review(
         .collect();
     let good_things: Vec<humanvoice::GoodThing> = Vec::new();
     let hv = if human_voice {
-        Some(humanvoice::rewrite(llm, &sp, &inp, &confirmed_after_merge, &good_things)?)
+        Some(humanvoice::rewrite(
+            llm,
+            &sp,
+            &inp,
+            &confirmed_after_merge,
+            &good_things,
+        )?)
     } else {
         None
     };
 
-    let deterministic = inp.deterministic_results.clone().unwrap_or_else(|| serde_json::json!({}));
+    let deterministic = inp
+        .deterministic_results
+        .clone()
+        .unwrap_or_else(|| serde_json::json!({}));
     report::write_review(
         &out_dir,
         &sp,
@@ -344,7 +425,14 @@ fn run_review(
         &selected,
     )?;
 
-    state::write(&out_dir, &state::State { round, findings: findings.clone(), resolved: resolved.clone() })?;
+    state::write(
+        &out_dir,
+        &state::State {
+            round,
+            findings: findings.clone(),
+            resolved: resolved.clone(),
+        },
+    )?;
 
     println!("\nDone — verdict={verdict} score={score}/100 effort={effort} estimated time (min) best={best} avg={avg} worst={worst}");
     println!("Report: {}", out_dir.join("report.md").display());
@@ -363,12 +451,21 @@ fn run_describe(
     out: &PathBuf,
 ) -> Result<()> {
     let sp = Spec::load(spec_path)?;
-    let inp = input::normalize(content_path, content_type, requirements_path.as_deref(), conventions_path.as_deref(), None)?;
+    let inp = input::normalize(
+        content_path,
+        content_type,
+        requirements_path.as_deref(),
+        conventions_path.as_deref(),
+        None,
+    )?;
     let out_dir = prepare_out(out)?;
     let d = describe::run(llm, &sp, &inp)?;
     let todos = describe::todo_sections(&inp.content);
     report::write_describe(&out_dir, &d, &todos)?;
-    println!("describe complete: {}", out_dir.join("describe.md").display());
+    println!(
+        "describe complete: {}",
+        out_dir.join("describe.md").display()
+    );
     println!("{}", llm.usage().summary());
     Ok(())
 }
@@ -386,11 +483,21 @@ fn run_improve(
     out: &PathBuf,
 ) -> Result<()> {
     let sp = Spec::load(spec_path)?;
-    let inp = input::normalize(content_path, content_type, requirements_path.as_deref(), conventions_path.as_deref(), None)?;
+    let inp = input::normalize(
+        content_path,
+        content_type,
+        requirements_path.as_deref(),
+        conventions_path.as_deref(),
+        None,
+    )?;
     let out_dir = prepare_out(out)?;
     let suggestions = improve::run(llm, &sp, &inp)?;
     report::write_improve(&out_dir, &suggestions)?;
-    println!("improve complete: {} suggestion(s) — {}", suggestions.len(), out_dir.join("improve.md").display());
+    println!(
+        "improve complete: {} suggestion(s) — {}",
+        suggestions.len(),
+        out_dir.join("improve.md").display()
+    );
     println!("{}", llm.usage().summary());
     Ok(())
 }
@@ -407,16 +514,27 @@ fn run_ask(
     question: &str,
 ) -> Result<()> {
     let sp = Spec::load(spec_path)?;
-    let inp = input::normalize(content_path, content_type, requirements_path.as_deref(), conventions_path.as_deref(), None)?;
+    let inp = input::normalize(
+        content_path,
+        content_type,
+        requirements_path.as_deref(),
+        conventions_path.as_deref(),
+        None,
+    )?;
     let out_dir = prepare_out(out)?;
     let answer = ask::run(llm, &sp, &inp, question)?;
     report::write_ask(&out_dir, question, &answer)?;
-    println!("{}\n\nRecorded: {}", answer, out_dir.join("ask.md").display());
+    println!(
+        "{}\n\nRecorded: {}",
+        answer,
+        out_dir.join("ask.md").display()
+    );
     println!("{}", llm.usage().summary());
     Ok(())
 }
 
 fn prepare_out(p: &PathBuf) -> Result<PathBuf> {
-    std::fs::create_dir_all(p).with_context(|| format!("Failed to create output directory: {}", p.display()))?;
+    std::fs::create_dir_all(p)
+        .with_context(|| format!("Failed to create output directory: {}", p.display()))?;
     Ok(p.clone())
 }

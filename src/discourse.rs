@@ -5,7 +5,8 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub const DISCOURSE_SYSTEM: &str = "You are a marketing review panel that cross-validates findings from multiple personas. \
+pub const DISCOURSE_SYSTEM: &str =
+    "You are a marketing review panel that cross-validates findings from multiple personas. \
 Do not agree or rebut without substance. Use AGREE only when citing new evidence (new_evidence). \
 This round must include at least one CHALLENGE. \
 Respond strictly in the specified JSON schema only.";
@@ -80,19 +81,30 @@ struct MovesResponse {
     moves: Vec<Move>,
 }
 
-fn run_round_call(llm: &Llm, spec: &Spec, findings: &[Finding], round: usize) -> Result<DiscourseRound> {
+fn run_round_call(
+    llm: &Llm,
+    spec: &Spec,
+    findings: &[Finding],
+    round: usize,
+) -> Result<DiscourseRound> {
     let prompt = build_round_prompt(spec, findings, round);
     let v = llm
         .json(&prompt, Some(DISCOURSE_SYSTEM))
         .with_context(|| format!("discourse round {round} failed"))?;
-    let mr: MovesResponse =
-        serde_json::from_value(v).with_context(|| format!("discourse round {round} JSON schema mismatch"))?;
-    Ok(DiscourseRound { round, moves: mr.moves })
+    let mr: MovesResponse = serde_json::from_value(v)
+        .with_context(|| format!("discourse round {round} JSON schema mismatch"))?;
+    Ok(DiscourseRound {
+        round,
+        moves: mr.moves,
+    })
 }
 
 /// Computes the final Resolution per finding_id, factoring in only moves that weren't invalidated.
 /// Priority: valid CHALLENGE (unrebutted) > CONNECT > only valid AGREE present > default UNCERTAIN.
-fn resolve_findings(findings: &[Finding], rounds: &[DiscourseRound]) -> HashMap<String, Resolution> {
+fn resolve_findings(
+    findings: &[Finding],
+    rounds: &[DiscourseRound],
+) -> HashMap<String, Resolution> {
     let all_moves: Vec<&Move> = rounds.iter().flat_map(|r| r.moves.iter()).collect();
 
     findings
@@ -100,7 +112,11 @@ fn resolve_findings(findings: &[Finding], rounds: &[DiscourseRound]) -> HashMap<
         .map(|f| {
             let valid_challenges: Vec<&&Move> = all_moves
                 .iter()
-                .filter(|m| m.kind == "CHALLENGE" && m.target_finding_id == f.id && validate_challenge_on_legal(m, findings))
+                .filter(|m| {
+                    m.kind == "CHALLENGE"
+                        && m.target_finding_id == f.id
+                        && validate_challenge_on_legal(m, findings)
+                })
                 .collect();
             let connects: Vec<&&Move> = all_moves
                 .iter()
@@ -112,17 +128,42 @@ fn resolve_findings(findings: &[Finding], rounds: &[DiscourseRound]) -> HashMap<
                 .collect();
 
             let resolution = if !valid_challenges.is_empty() {
-                let ev = valid_challenges.iter().map(|m| m.detail.as_str()).collect::<Vec<_>>().join(" / ");
-                Resolution { status: "REJECTED".to_string(), evidence: ev }
+                let ev = valid_challenges
+                    .iter()
+                    .map(|m| m.detail.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" / ");
+                Resolution {
+                    status: "REJECTED".to_string(),
+                    evidence: ev,
+                }
             } else if !connects.is_empty() {
                 // CONNECT does not replace the original finding — it stays in the findings list, only status becomes MERGED.
-                let ev = connects.iter().map(|m| m.detail.as_str()).collect::<Vec<_>>().join(" / ");
-                Resolution { status: "MERGED".to_string(), evidence: ev }
+                let ev = connects
+                    .iter()
+                    .map(|m| m.detail.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" / ");
+                Resolution {
+                    status: "MERGED".to_string(),
+                    evidence: ev,
+                }
             } else if !valid_agrees.is_empty() {
-                let ev = valid_agrees.iter().map(|m| m.new_evidence.as_str()).collect::<Vec<_>>().join(" / ");
-                Resolution { status: "CONFIRMED".to_string(), evidence: ev }
+                let ev = valid_agrees
+                    .iter()
+                    .map(|m| m.new_evidence.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" / ");
+                Resolution {
+                    status: "CONFIRMED".to_string(),
+                    evidence: ev,
+                }
             } else {
-                Resolution { status: "UNCERTAIN".to_string(), evidence: "No basis for a verdict found in the cross-validation round".to_string() }
+                Resolution {
+                    status: "UNCERTAIN".to_string(),
+                    evidence: "No basis for a verdict found in the cross-validation round"
+                        .to_string(),
+                }
             };
             (f.id.clone(), resolution)
         })
@@ -151,7 +192,8 @@ pub fn run(
             .iter()
             .any(|m| m.kind == "CHALLENGE" && validate_challenge_on_legal(m, findings));
         if !has_valid_challenge {
-            dr = run_round_call(llm, spec, findings, round).context("re-request for missing CHALLENGE failed")?;
+            dr = run_round_call(llm, spec, findings, round)
+                .context("re-request for missing CHALLENGE failed")?;
             // If the re-request result also has no valid CHALLENGE, let it pass anyway (same as the original rule).
         }
         rounds.push(dr);

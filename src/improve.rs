@@ -5,7 +5,8 @@ use crate::spec::Spec;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-pub const IMPROVE_SYSTEM: &str = "You are a marketing reviewer proposing concrete copy improvements. \
+pub const IMPROVE_SYSTEM: &str =
+    "You are a marketing reviewer proposing concrete copy improvements. \
 Don't suggest things already reflected, or trivial wording polish. \
 Respond strictly in the specified JSON schema only.";
 
@@ -40,7 +41,9 @@ pub fn run(llm: &Llm, spec: &Spec, input: &Input) -> Result<Vec<Suggestion>> {
          \"label\":<one of the allowed values>}}]}}\n",
         labels = spec.labels_prompt(),
     );
-    let v = llm.json_ctx(Some(&ctx), &task, Some(IMPROVE_SYSTEM)).context("improve failed")?;
+    let v = llm
+        .json_ctx(Some(&ctx), &task, Some(IMPROVE_SYSTEM))
+        .context("improve failed")?;
     let out: ImproveOutput = serde_json::from_value(v).context("improve JSON schema mismatch")?;
     Ok(out.suggestions)
 }

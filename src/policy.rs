@@ -39,16 +39,31 @@ pub fn required_disclaimer_check(spec: &Spec, input: &Input) -> PolicyResult {
             evidence: "spec.disclaimer_required_types not configured".into(),
         };
     }
-    if !spec.disclaimer_required_types.iter().any(|t| t == &input.content_type) {
+    if !spec
+        .disclaimer_required_types
+        .iter()
+        .any(|t| t == &input.content_type)
+    {
         return PolicyResult {
             check: "Required disclaimer present".into(),
             status: PolicyStatus::NotApplicable,
-            evidence: format!("content_type '{}' is not in the required-disclaimer list", input.content_type),
+            evidence: format!(
+                "content_type '{}' is not in the required-disclaimer list",
+                input.content_type
+            ),
         };
     }
-    let full_text: String = input.blocks.iter().map(|(_, c)| c.as_str()).collect::<Vec<_>>().join("\n");
+    let full_text: String = input
+        .blocks
+        .iter()
+        .map(|(_, c)| c.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
     let lower = full_text.to_lowercase();
-    match DISCLAIMER_MARKERS.iter().find(|m| lower.contains(&m.to_lowercase())) {
+    match DISCLAIMER_MARKERS
+        .iter()
+        .find(|m| lower.contains(&m.to_lowercase()))
+    {
         Some(marker) => PolicyResult {
             check: "Required disclaimer present".into(),
             status: PolicyStatus::Pass,
@@ -75,13 +90,19 @@ pub fn content_length_check(spec: &Spec, input: &Input) -> PolicyResult {
         PolicyResult {
             check: "Content length within limit".into(),
             status: PolicyStatus::Pass,
-            evidence: format!("word_count {} <= threshold {}", input.word_count, spec.content_length_limit),
+            evidence: format!(
+                "word_count {} <= threshold {}",
+                input.word_count, spec.content_length_limit
+            ),
         }
     } else {
         PolicyResult {
             check: "Content length within limit".into(),
             status: PolicyStatus::Fail,
-            evidence: format!("word_count {} > threshold {}", input.word_count, spec.content_length_limit),
+            evidence: format!(
+                "word_count {} > threshold {}",
+                input.word_count, spec.content_length_limit
+            ),
         }
     }
 }
@@ -95,19 +116,38 @@ pub fn brand_terms_check(spec: &Spec, input: &Input) -> PolicyResult {
             evidence: "spec.required_brand_terms not configured".into(),
         };
     }
-    let full_text: String = input.blocks.iter().map(|(_, c)| c.as_str()).collect::<Vec<_>>().join("\n");
-    let found: Vec<&String> = spec.required_brand_terms.iter().filter(|t| full_text.contains(t.as_str())).collect();
+    let full_text: String = input
+        .blocks
+        .iter()
+        .map(|(_, c)| c.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let found: Vec<&String> = spec
+        .required_brand_terms
+        .iter()
+        .filter(|t| full_text.contains(t.as_str()))
+        .collect();
     if found.is_empty() {
         PolicyResult {
             check: "Required brand terms present".into(),
             status: PolicyStatus::Fail,
-            evidence: format!("Required brand terms not found: {}", spec.required_brand_terms.join(", ")),
+            evidence: format!(
+                "Required brand terms not found: {}",
+                spec.required_brand_terms.join(", ")
+            ),
         }
     } else {
         PolicyResult {
             check: "Required brand terms present".into(),
             status: PolicyStatus::Pass,
-            evidence: format!("Brand terms found: {}", found.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")),
+            evidence: format!(
+                "Brand terms found: {}",
+                found
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         }
     }
 }

@@ -6,8 +6,8 @@ use crate::input::Input;
 use crate::lens::Finding;
 use crate::policy;
 use crate::quantify;
-use crate::spec::Lens;
 use crate::requirements;
+use crate::spec::Lens;
 use crate::spec::Spec;
 use anyhow::{Context, Result};
 use std::collections::HashMap;
@@ -40,7 +40,10 @@ fn deterministic_table(spec: &Spec, deterministic: &serde_json::Value) -> String
             .and_then(|s| s.as_str())
             .unwrap_or("")
             .to_string();
-        md.push_str(&format!("| {} | {} | {} | {} |\n", c.title, c.tool, status, evidence));
+        md.push_str(&format!(
+            "| {} | {} | {} | {} |\n",
+            c.title, c.tool, status, evidence
+        ));
     }
     md
 }
@@ -78,7 +81,10 @@ pub fn write_review(
     let effort = quantify::effort(input, selected_lenses.len());
     let (time_best, time_average, time_worst) = quantify::time_estimate(effort);
 
-    md.push_str(&format!("# Marketing Content Review — {} (round {})\n\n", spec.name, round));
+    md.push_str(&format!(
+        "# Marketing Content Review — {} (round {})\n\n",
+        spec.name, round
+    ));
     md.push_str(&format!(
         "**Verdict: {}**  ·  Score: {}/100  ·  Effort: {}/5  ·  Content type: {}\n\n",
         verdict, score, effort, input.content_type
@@ -94,9 +100,14 @@ pub fn write_review(
 
     if let Some(frs) = fix_results {
         if !frs.is_empty() {
-            md.push_str("## Vs. previous round\n\n| Finding | Status | Evidence |\n|---|---|---|\n");
+            md.push_str(
+                "## Vs. previous round\n\n| Finding | Status | Evidence |\n|---|---|---|\n",
+            );
             for f in frs {
-                md.push_str(&format!("| {} | {} | {} |\n", f.finding_id, f.status, f.evidence));
+                md.push_str(&format!(
+                    "| {} | {} | {} |\n",
+                    f.finding_id, f.status, f.evidence
+                ));
             }
             md.push('\n');
         }
@@ -104,7 +115,12 @@ pub fn write_review(
 
     md.push_str("## Policy checks\n\n| Policy | Status | Evidence |\n|---|---|---|\n");
     for p in policies {
-        md.push_str(&format!("| {} | {} | {} |\n", p.check, p.status.label(), p.evidence));
+        md.push_str(&format!(
+            "| {} | {} | {} |\n",
+            p.check,
+            p.status.label(),
+            p.evidence
+        ));
     }
     md.push('\n');
 
@@ -136,7 +152,10 @@ pub fn write_review(
         Some(reqs) => {
             md.push_str("| Requirement | Status | Evidence or gap |\n|---|---|---|\n");
             for r in reqs {
-                md.push_str(&format!("| {} | {} | {} |\n", r.requirement, r.status, r.evidence));
+                md.push_str(&format!(
+                    "| {} | {} | {} |\n",
+                    r.requirement, r.status, r.evidence
+                ));
             }
             md.push('\n');
         }
@@ -146,10 +165,21 @@ pub fn write_review(
     md.push_str(&format!("Allowed labels: {}\n\n", spec.labels_prompt()));
     md.push_str("| ID | Priority | Label | Reviewer | Block | Evidence | Impact | Recommendation | Discourse result |\n|---|---|---|---|---|---|---|---|---|\n");
     for f in &confirmed {
-        let discourse_result = resolved.get(&f.id).map(|r| r.evidence.as_str()).unwrap_or("");
+        let discourse_result = resolved
+            .get(&f.id)
+            .map(|r| r.evidence.as_str())
+            .unwrap_or("");
         md.push_str(&format!(
             "| {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
-            f.id, f.severity, f.label, f.persona, f.block_ref, f.evidence, f.impact, f.recommendation, discourse_result
+            f.id,
+            f.severity,
+            f.label,
+            f.persona,
+            f.block_ref,
+            f.evidence,
+            f.impact,
+            f.recommendation,
+            discourse_result
         ));
     }
     md.push('\n');
@@ -161,7 +191,10 @@ pub fn write_review(
     if !rejected.is_empty() {
         md.push_str("### Rejected Candidates\n\n");
         for f in &rejected {
-            let reason = resolved.get(&f.id).map(|r| r.evidence.as_str()).unwrap_or("");
+            let reason = resolved
+                .get(&f.id)
+                .map(|r| r.evidence.as_str())
+                .unwrap_or("");
             md.push_str(&format!("- {} ({}) — {}\n", f.id, f.block_ref, reason));
         }
         md.push('\n');
@@ -174,7 +207,10 @@ pub fn write_review(
     if !uncertain.is_empty() {
         md.push_str("### Needs Verification\n\n");
         for f in &uncertain {
-            let note = resolved.get(&f.id).map(|r| r.evidence.as_str()).unwrap_or("");
+            let note = resolved
+                .get(&f.id)
+                .map(|r| r.evidence.as_str())
+                .unwrap_or("");
             md.push_str(&format!("- {} ({}) — {}\n", f.id, f.block_ref, note));
         }
         md.push('\n');
@@ -211,7 +247,11 @@ pub fn write_review(
                 }
                 _ => true,
             };
-            let move_label = if valid { mv.kind.clone() } else { format!("{} (invalid)", mv.kind) };
+            let move_label = if valid {
+                mv.kind.clone()
+            } else {
+                format!("{} (invalid)", mv.kind)
+            };
             md.push_str(&format!(
                 "| {} | {} | {} | {} | {} |\n",
                 dr.round, move_label, mv.target_finding_id, mv.detail, mv.new_evidence
@@ -236,7 +276,10 @@ pub fn write_describe(out_dir: &Path, d: &describe::Describe, todos: &[String]) 
     md.push_str("## Walkthrough\n\n");
     md.push_str(&format!("{}\n\n", d.walkthrough));
     md.push_str(&format!("## Labels\n\n{}\n\n", d.labels.join(", ")));
-    md.push_str(&format!("## can_be_split\n\n{} — {}\n\n", d.can_be_split, d.can_be_split_note));
+    md.push_str(&format!(
+        "## can_be_split\n\n{} — {}\n\n",
+        d.can_be_split, d.can_be_split_note
+    ));
     md.push_str("## TODO/FIXME (new lines, deterministic scan)\n\n");
     if todos.is_empty() {
         md.push_str("None\n");
@@ -257,7 +300,10 @@ pub fn write_improve(out_dir: &Path, suggestions: &[improve::Suggestion]) -> Res
         md.push_str("No suggestions\n");
     }
     for s in suggestions {
-        md.push_str(&format!("## {} — {} [{}]\n\n", s.relevant_block, s.one_sentence_summary, s.label));
+        md.push_str(&format!(
+            "## {} — {} [{}]\n\n",
+            s.relevant_block, s.one_sentence_summary, s.label
+        ));
         md.push_str(&format!("{}\n\n", s.suggestion_content));
         md.push_str(&format!("```\n// before\n{}\n```\n\n", s.existing_content));
         md.push_str(&format!("```\n// after\n{}\n```\n\n", s.improved_content));

@@ -10,5 +10,6 @@ Answer only based on the content, requirements, and brand guide. If there's no b
 pub fn run(llm: &Llm, spec: &Spec, input: &Input, question: &str) -> Result<String> {
     let ctx = shared_context(spec, input);
     let task = format!("# Question\n{question}\n");
-    llm.text_ctx(Some(&ctx), &task, Some(ASK_SYSTEM)).context("ask failed")
+    llm.text_ctx(Some(&ctx), &task, Some(ASK_SYSTEM))
+        .context("ask failed")
 }
