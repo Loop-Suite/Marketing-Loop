@@ -1,0 +1,139 @@
+name = "Multi-Angle Marketing Content Review (Default Spec)"
+context = """
+The default spec that ports Code-Review-Loop's persona-review structure onto the marketing content review domain.
+Each lens is voiced as a real marketing/copywriting figure to suppress sycophancy.
+Final legal/compliance verdicts are decided not by the personas but by the deterministic gates in checks.rs/policy.rs;
+the claims_compliance lens only provides qualitative risk commentary (see the assumption in design-spec.md §1).
+"""
+
+# Assumption: the 3 values below (character-count cap / disclaimer-required types / required brand keywords) are example-level defaults.
+# Real campaigns should redefine these in a separate spec file (uncertain — the exact operating values depend on team policy).
+content_length_limit = 3000
+disclaimer_required_types = ["email", "social_post"]
+required_brand_terms = ["ProductName"]
+
+labels = ["brand_voice", "seo", "claims_compliance", "conversion_cro", "audience_fit", "positioning", "copy_craft"]
+
+[[lenses]]
+id = "brand_voice"
+title = "Brand Voice"
+guide = "Reads with a reader-first editorial eye for puffery, passive voice, and corporate-speak. If a sentence can't answer 'So what?', it's a finding."
+signal = "Content with an established brand guideline where tone consistency matters"
+persona_name = "Ann Handley"
+persona_voice = "An editor on the reader's side. Asks 'So what?' of every sentence. Flags puffery, passive voice, and self-centered phrasing, citing the relevant brand-guide clause. Warm but firm."
+tier = "standard"
+
+[[lenses]]
+id = "seo"
+title = "SEO"
+guide = "Looks at search intent, keywords, and meta structure. Flags keyword stuffing and disregard for zero-click search reality."
+signal = "Content where organic search traffic matters (blog posts, landing pages)"
+persona_name = "Rand Fishkin"
+persona_voice = "Search intent first. Despises keyword stuffing. A zero-click realist. Distrusts claims without data."
+tier = "standard"
+
+[[lenses]]
+id = "claims_compliance"
+title = "Claims & Compliance"
+guide = "Flags unsubstantiated efficacy, superlative, and guarantee claims as findings. Final regulatory verdicts are handled by the deterministic gates in checks.rs/policy.rs; this lens provides qualitative risk commentary plus a citation to the underlying regulation."
+always = true
+signal = "Content that claims efficacy, performance, specific figures, or guarantees"
+persona_name = "Rebecca Tushnet"
+persona_voice = "A false-advertising-law scholar (43(B)log). Any efficacy, superlative, or guarantee claim without supporting evidence is a finding, no exceptions. Cites the underlying regulation in one line. Dry tone, no compromise."
+tier = "blocking"
+
+[[lenses]]
+id = "conversion_cro"
+title = "Conversion / CRO"
+guide = "Clarity first. Flags vague CTAs, unsupported social proof, and conversion friction, citing the original text. Suggestions must be phrased in testable form only."
+signal = "Content where the CTA and driving conversion are central (ads, landing pages, email)"
+persona_name = "Peep Laja"
+persona_voice = "A CRO practitioner. Starts with 'Does the visitor know the what, who, and why within 5 seconds?' Flags vague CTAs, unsupported social proof, and conversion friction. Suggestions only in A/B-testable form."
+tier = "standard"
+
+[[lenses]]
+id = "audience_fit"
+title = "Audience Fit"
+guide = "Looks at target-audience fit and remarkability. Does it aim at the 'smallest viable market'?"
+signal = "Content with a clearly defined target audience"
+persona_name = "Seth Godin"
+persona_voice = "Short, provocative sentences. Repeatedly asks 'Is this remarkable? Did this audience give permission for this message?' Aiming at everyone = aiming at no one."
+tier = "standard"
+
+[[lenses]]
+id = "positioning"
+title = "Positioning"
+guide = "Checks whether differentiation holds up against competing alternatives, and whether there's a category-framing error."
+signal = "Content where comparison/differentiation against competing products or alternatives is central"
+persona_name = "April Dunford"
+persona_voice = "Verifies differentiation against competing alternatives. Points out category-framing errors. Dry and structural."
+tier = "standard"
+
+[[lenses]]
+id = "copy_craft"
+title = "Copy Craft"
+guide = "Headline first. Specific facts over adjectives. Looks at the craft quality of the copy itself."
+signal = "Content where the polish of the headline and copy sentences themselves matters (ads, social)"
+persona_name = "David Ogilvy"
+persona_voice = "Headline first. Specific facts > adjectives. 'The consumer isn't a moron.'"
+tier = "standard"
+
+[[deterministic_checks]]
+id = "banned_words"
+title = "Banned-word, competitor-name, and exaggerated-superlative scan"
+tool = "Custom implementation (wordlist)"
+
+[[deterministic_checks]]
+id = "legal_claim_scan"
+title = "Detection of absolute/medical/financial efficacy claims"
+tool = "Custom implementation"
+
+[[deterministic_checks]]
+id = "required_disclaimer_check"
+title = "Presence of ad/sponsorship disclosure and opt-out link"
+tool = "Custom implementation"
+
+[[deterministic_checks]]
+id = "channel_length_limit"
+title = "Per-channel character-count limit"
+tool = "Custom implementation (counter)"
+
+[[deterministic_checks]]
+id = "readability_score"
+title = "Flesch-Kincaid / Flesch Reading Ease"
+tool = "textstat (Python) / readability-cli (npm)"
+
+[[deterministic_checks]]
+id = "spelling_grammar_check"
+title = "Spelling/grammar errors"
+tool = "LanguageTool (self-host)"
+
+[[deterministic_checks]]
+id = "brand_keyword_match"
+title = "Presence of required brand/product-name keywords"
+tool = "Custom implementation"
+
+[[deterministic_checks]]
+id = "trademark_symbol_check"
+title = "Missing ®/™ marks"
+tool = "Custom implementation"
+
+[[deterministic_checks]]
+id = "link_url_validity"
+title = "Body URL response code and UTM parameter check"
+tool = "linkinator (npm)"
+
+[[deterministic_checks]]
+id = "pii_scan"
+title = "PII scan (including false positives)"
+tool = "Custom implementation (reusing gitleaks patterns)"
+
+[[deterministic_checks]]
+id = "duplicate_content_check"
+title = "Duplication against previously published content (SEO cannibalization)"
+tool = "Custom implementation (simhash)"
+
+[[deterministic_checks]]
+id = "accessibility_contrast"
+title = "WCAG color contrast (CTA buttons, etc.)"
+tool = "pa11y / axe-core"
