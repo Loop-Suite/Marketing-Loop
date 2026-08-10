@@ -53,3 +53,30 @@ pub fn run(llm: &Llm, spec: &Spec, input: &Input) -> Result<Vec<Suggestion>> {
     let out: ImproveOutput = serde_json::from_value(v).context("improve JSON schema mismatch")?;
     Ok(out.suggestions)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for #18: Suggestion's required fields must tolerate explicit JSON null.
+    #[test]
+    fn suggestion_tolerates_explicit_nulls() {
+        let v = serde_json::json!({
+            "relevant_block": null, "existing_content": null, "suggestion_content": null,
+            "improved_content": null, "one_sentence_summary": null, "label": null
+        });
+        let s: Suggestion =
+            serde_json::from_value(v).expect("explicit null must not crash deserialization");
+        assert_eq!(s.label, "");
+    }
+
+    /// Regression test for #9: the LLM-response envelope must tolerate an explicit top-level
+    /// `"suggestions": null` without crashing.
+    #[test]
+    fn improve_output_tolerates_null_suggestions_array() {
+        let v = serde_json::json!({"suggestions": null});
+        let out: ImproveOutput =
+            serde_json::from_value(v).expect("explicit null must not crash deserialization");
+        assert!(out.suggestions.is_empty());
+    }
+}

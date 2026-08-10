@@ -285,3 +285,147 @@ pub fn validate_challenge_on_legal(mv: &Move, findings: &[Finding]) -> bool {
     }
     is_regulation_citation(&mv.detail) || is_regulation_citation(&mv.new_evidence)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lens::Finding;
+
+    fn finding(id: &str, lens: &str) -> Finding {
+        Finding {
+            id: id.to_string(),
+            lens: lens.to_string(),
+            persona: "p".to_string(),
+            severity: "P1".to_string(),
+            label: "label".to_string(),
+            block_ref: "b:0".to_string(),
+            claim: "c".to_string(),
+            evidence: "e".to_string(),
+            impact: String::new(),
+            recommendation: String::new(),
+        }
+    }
+
+    fn mv(kind: &str, target: &str, detail: &str, new_evidence: &str) -> Move {
+        Move {
+            kind: kind.to_string(),
+            target_finding_id: target.to_string(),
+            new_evidence: new_evidence.to_string(),
+            detail: detail.to_string(),
+        }
+    }
+
+    #[test]
+    fn connect_target_ids_splits_and_trims_comma_list() {
+        assert_eq!(
+            connect_target_ids("a-1, b-2 ,c-3"),
+            vec!["a-1", "b-2", "c-3"]
+        );
+    }
+
+    #[test]
+    fn connect_target_ids_empty_string_yields_no_ids() {
+        assert!(connect_target_ids("").is_empty());
+    }
+
+    /// Regression test for #10: a CONNECT move's target_finding_id can hold multiple
+    /// comma-joined ids (real observed model output, e.g. "claims_compliance-3,copy_craft-1") —
+    /// every referenced finding must resolve to MERGED, not just the first.
+    #[test]
+    fn connect_move_merges_all_comma_joined_targets() {
+        let findings = vec![finding("a-1", "lens_a"), finding("b-1", "lens_b")];
+        let round = DiscourseRound {
+            round: 1,
+            moves: vec![mv("CONNECT", "a-1,b-1", "related", "")],
+        };
+        let resolved = resolve_findings(&findings, &[round]);
+        assert_eq!(resolved["a-1"].status, "MERGED");
+        assert_eq!(resolved["b-1"].status, "MERGED");
+    }
+
+    #[test]
+    fn agree_without_new_evidence_is_invalid() {
+        assert!(!validate_agree(&mv("AGREE", "a-1", "", "")));
+        assert!(validate_agree(&mv(
+            "AGREE",
+            "a-1",
+            "",
+            "concrete new evidence"
+        )));
+    }
+
+    #[test]
+    fn agree_with_new_evidence_confirms_the_finding() {
+        let findings = vec![finding("a-1", "lens_a")];
+        let round = DiscourseRound {
+            round: 1,
+            moves: vec![mv("AGREE", "a-1", "", "independently verified")],
+        };
+        let resolved = resolve_findings(&findings, &[round]);
+        assert_eq!(resolved["a-1"].status, "CONFIRMED");
+    }
+
+    #[test]
+    fn challenge_on_legal_finding_requires_regulation_citation() {
+        let findings = vec![finding("claims_compliance-1", "claims_compliance")];
+        let stylistic = mv(
+            "CHALLENGE",
+            "claims_compliance-1",
+            "I just don't like the tone",
+            "",
+        );
+        assert!(!validate_challenge_on_legal(&stylistic, &findings));
+        let cited = mv(
+            "CHALLENGE",
+            "claims_compliance-1",
+            "제17조 2항에 따라 문제 없음",
+            "",
+        );
+        assert!(validate_challenge_on_legal(&cited, &findings));
+    }
+
+    #[test]
+    fn challenge_on_non_legal_finding_is_always_valid() {
+        let findings = vec![finding("copy_craft-1", "copy_craft")];
+        let stylistic = mv("CHALLENGE", "copy_craft-1", "just a preference", "");
+        assert!(validate_challenge_on_legal(&stylistic, &findings));
+    }
+
+    #[test]
+    fn is_regulation_citation_detects_article_and_clause_markers() {
+        assert!(is_regulation_citation("제17조에 따라"));
+        assert!(is_regulation_citation("2항 위반"));
+        assert!(is_regulation_citation("관련 규정 위반"));
+        assert!(is_regulation_citation("§230"));
+        assert!(!is_regulation_citation("그냥 취향 문제"));
+    }
+
+    #[test]
+    fn findings_with_no_moves_are_uncertain() {
+        let findings = vec![finding("a-1", "lens_a")];
+        let resolved = resolve_findings(&findings, &[]);
+        assert_eq!(resolved["a-1"].status, "UNCERTAIN");
+    }
+
+    /// Regression test for #18: an explicit JSON null on the required "move" field must not
+    /// crash deserialization — the same failure family #9 fixed for other fields.
+    #[test]
+    fn move_tolerates_explicit_null_kind() {
+        let v = serde_json::json!({
+            "move": null, "target_finding_id": "a-1", "new_evidence": null, "detail": null
+        });
+        let m: Move =
+            serde_json::from_value(v).expect("explicit null must not crash deserialization");
+        assert_eq!(m.kind, "");
+    }
+
+    /// Regression test for #9: the LLM-response envelope must tolerate an explicit top-level
+    /// `"moves": null` without crashing.
+    #[test]
+    fn moves_response_tolerates_null_moves_array() {
+        let v = serde_json::json!({"moves": null});
+        let mr: MovesResponse =
+            serde_json::from_value(v).expect("explicit null must not crash deserialization");
+        assert!(mr.moves.is_empty());
+    }
+}

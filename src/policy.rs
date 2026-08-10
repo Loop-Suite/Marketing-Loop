@@ -159,3 +159,139 @@ pub fn check_all(spec: &Spec, input: &Input) -> Vec<PolicyResult> {
         brand_terms_check(spec, input),
     ]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::spec::Spec;
+
+    fn spec(
+        content_length_limit: usize,
+        disclaimer_types: Vec<String>,
+        brand_terms: Vec<String>,
+    ) -> Spec {
+        Spec {
+            name: "t".into(),
+            context: String::new(),
+            lenses: vec![],
+            deterministic_checks: vec![],
+            labels: vec!["l".into()],
+            content_length_limit,
+            disclaimer_required_types: disclaimer_types,
+            required_brand_terms: brand_terms,
+        }
+    }
+
+    fn input(content_type: &str, char_count: usize, blocks: Vec<(&str, &str)>) -> Input {
+        Input {
+            content: String::new(),
+            content_type: content_type.to_string(),
+            blocks: blocks
+                .into_iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect(),
+            word_count: 0,
+            char_count,
+            requirements: None,
+            conventions: None,
+            deterministic_results: None,
+        }
+    }
+
+    #[test]
+    fn content_length_check_not_configured_when_limit_zero() {
+        let sp = spec(0, vec![], vec![]);
+        let inp = input("email", 100, vec![]);
+        assert_eq!(
+            content_length_check(&sp, &inp).status,
+            PolicyStatus::NotConfigured
+        );
+    }
+
+    /// Regression test for #5: this check must compare against char_count, not word_count — a
+    /// body whose char_count already exceeds the character-based limit must FAIL.
+    #[test]
+    fn content_length_check_compares_char_count_not_word_count() {
+        let sp = spec(10, vec![], vec![]);
+        let inp = input("email", 50, vec![]); // char_count 50 > limit 10
+        assert_eq!(content_length_check(&sp, &inp).status, PolicyStatus::Fail);
+    }
+
+    #[test]
+    fn content_length_check_passes_within_limit() {
+        let sp = spec(100, vec![], vec![]);
+        let inp = input("email", 50, vec![]);
+        assert_eq!(content_length_check(&sp, &inp).status, PolicyStatus::Pass);
+    }
+
+    #[test]
+    fn required_disclaimer_check_not_configured_when_unset() {
+        let sp = spec(0, vec![], vec![]);
+        let inp = input("email", 0, vec![("b", "buy now")]);
+        assert_eq!(
+            required_disclaimer_check(&sp, &inp).status,
+            PolicyStatus::NotConfigured
+        );
+    }
+
+    #[test]
+    fn required_disclaimer_check_not_applicable_for_other_type() {
+        let sp = spec(0, vec!["email".to_string()], vec![]);
+        let inp = input("social_post", 0, vec![("b", "buy now")]);
+        assert_eq!(
+            required_disclaimer_check(&sp, &inp).status,
+            PolicyStatus::NotApplicable
+        );
+    }
+
+    #[test]
+    fn required_disclaimer_check_fails_without_marker() {
+        let sp = spec(0, vec!["email".to_string()], vec![]);
+        let inp = input("email", 0, vec![("b", "buy now")]);
+        assert_eq!(
+            required_disclaimer_check(&sp, &inp).status,
+            PolicyStatus::Fail
+        );
+    }
+
+    #[test]
+    fn required_disclaimer_check_passes_with_marker() {
+        let sp = spec(0, vec!["email".to_string()], vec![]);
+        let inp = input("email", 0, vec![("b", "buy now. unsubscribe here")]);
+        assert_eq!(
+            required_disclaimer_check(&sp, &inp).status,
+            PolicyStatus::Pass
+        );
+    }
+
+    #[test]
+    fn brand_terms_check_not_configured_when_unset() {
+        let sp = spec(0, vec![], vec![]);
+        let inp = input("email", 0, vec![("b", "buy now")]);
+        assert_eq!(
+            brand_terms_check(&sp, &inp).status,
+            PolicyStatus::NotConfigured
+        );
+    }
+
+    #[test]
+    fn brand_terms_check_fails_when_missing() {
+        let sp = spec(0, vec![], vec!["Acme".to_string()]);
+        let inp = input("email", 0, vec![("b", "buy now")]);
+        assert_eq!(brand_terms_check(&sp, &inp).status, PolicyStatus::Fail);
+    }
+
+    #[test]
+    fn brand_terms_check_passes_when_present() {
+        let sp = spec(0, vec![], vec!["Acme".to_string()]);
+        let inp = input("email", 0, vec![("b", "Acme is here")]);
+        assert_eq!(brand_terms_check(&sp, &inp).status, PolicyStatus::Pass);
+    }
+
+    #[test]
+    fn check_all_returns_three_results() {
+        let sp = spec(0, vec![], vec![]);
+        let inp = input("email", 0, vec![]);
+        assert_eq!(check_all(&sp, &inp).len(), 3);
+    }
+}

@@ -219,3 +219,64 @@ pub fn review_all(
     }
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for #9/#18: explicit JSON null on required RawFinding fields must not
+    /// crash deserialization.
+    #[test]
+    fn raw_finding_tolerates_explicit_nulls() {
+        let v = serde_json::json!({
+            "severity": null, "label": null, "claim": null, "evidence": null,
+            "block_ref": null, "impact": null, "recommendation": null
+        });
+        let rf: RawFinding =
+            serde_json::from_value(v).expect("explicit null must not crash deserialization");
+        assert_eq!(rf.severity, "");
+        assert_eq!(rf.block_ref, "");
+    }
+
+    #[test]
+    fn lens_output_tolerates_null_findings_array() {
+        let v = serde_json::json!({"findings": null});
+        let out: LensOutput =
+            serde_json::from_value(v).expect("explicit null must not crash deserialization");
+        assert!(out.findings.is_empty());
+    }
+
+    #[test]
+    fn select_lenses_returns_empty_when_no_optional_lenses() {
+        let spec = Spec {
+            name: "t".into(),
+            context: String::new(),
+            lenses: vec![Lens {
+                id: "claims_compliance".into(),
+                title: "Claims".into(),
+                guide: String::new(),
+                always: true,
+                signal: String::new(),
+                persona_name: String::new(),
+                persona_voice: String::new(),
+                tier: "blocking".into(),
+            }],
+            deterministic_checks: vec![],
+            labels: vec!["l".into()],
+            content_length_limit: 0,
+            disclaimer_required_types: vec![],
+            required_brand_terms: vec![],
+        };
+        // Every lens is `always = true`, so optional_lenses() is empty and select_lenses must
+        // short-circuit without needing an LLM call.
+        let llm = Llm::claude_cli(
+            "does-not-matter".to_string(),
+            None,
+            0,
+            false,
+            Llm::new_usage_tracker(),
+        );
+        let selected = select_lenses(&llm, &spec).unwrap();
+        assert!(selected.is_empty());
+    }
+}

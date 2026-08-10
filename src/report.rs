@@ -353,3 +353,155 @@ pub fn write_ask(out_dir: &Path, question: &str, answer: &str) -> Result<()> {
     std::fs::write(&path, entry).with_context(|| format!("Failed to write {}", path.display()))?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::discourse::Resolution;
+
+    fn unique_tmp_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "mktloop-test-report-{name}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn test_lens(id: &str, tier: &str) -> Lens {
+        Lens {
+            id: id.to_string(),
+            title: id.to_string(),
+            guide: String::new(),
+            always: false,
+            signal: String::new(),
+            persona_name: String::new(),
+            persona_voice: String::new(),
+            tier: tier.to_string(),
+        }
+    }
+
+    fn test_spec() -> Spec {
+        Spec {
+            name: "Test Spec".to_string(),
+            context: String::new(),
+            lenses: vec![
+                test_lens("copy_craft", "standard"),
+                test_lens("claims_compliance", "blocking"),
+            ],
+            deterministic_checks: vec![],
+            labels: vec!["copy_craft".to_string(), "claims_compliance".to_string()],
+            content_length_limit: 0,
+            disclaimer_required_types: vec![],
+            required_brand_terms: vec![],
+        }
+    }
+
+    fn test_finding(id: &str, lens: &str) -> Finding {
+        Finding {
+            id: id.to_string(),
+            lens: lens.to_string(),
+            persona: "persona".to_string(),
+            severity: "P0".to_string(),
+            label: lens.to_string(),
+            block_ref: "b:0".to_string(),
+            claim: "claim".to_string(),
+            evidence: "evidence".to_string(),
+            impact: String::new(),
+            recommendation: String::new(),
+        }
+    }
+
+    fn test_input() -> Input {
+        Input {
+            content: "content".to_string(),
+            content_type: "ad_copy".to_string(),
+            blocks: vec![],
+            word_count: 10,
+            char_count: 50,
+            requirements: None,
+            conventions: None,
+            deterministic_results: None,
+        }
+    }
+
+    /// Regression test combining #8 and #17: a MERGED non-blocking-tier finding must still be
+    /// visible somewhere in report.md (the "Merged Findings" section #8 added), while a MERGED
+    /// blocking-tier finding must appear in the main Findings table instead (since it now counts
+    /// toward score/verdict per #17) and not be duplicated into the Merged Findings section.
+    #[test]
+    fn merged_findings_render_in_the_correct_section() {
+        let dir = unique_tmp_dir("merged-sections");
+        let spec = test_spec();
+        let input = test_input();
+        let findings = vec![
+            test_finding("copy_craft-1", "copy_craft"),
+            test_finding("claims_compliance-1", "claims_compliance"),
+        ];
+        let mut resolved: HashMap<String, Resolution> = HashMap::new();
+        resolved.insert(
+            "copy_craft-1".to_string(),
+            Resolution {
+                status: "MERGED".to_string(),
+                evidence: "merged into another copy finding".to_string(),
+            },
+        );
+        resolved.insert(
+            "claims_compliance-1".to_string(),
+            Resolution {
+                status: "MERGED".to_string(),
+                evidence: "merged into another compliance finding".to_string(),
+            },
+        );
+
+        write_review(
+            &dir,
+            &spec,
+            &input,
+            0,
+            &findings,
+            &resolved,
+            &[],
+            &None,
+            &[],
+            &serde_json::json!({}),
+            None,
+            None,
+            &spec.lenses,
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(dir.join("report.md")).unwrap();
+        let findings_idx = text.find("## Findings").expect("Findings section missing");
+        let merged_idx = text
+            .find("### Merged Findings")
+            .expect("Merged Findings section missing");
+        assert!(merged_idx > findings_idx);
+
+        let main_table = &text[findings_idx..merged_idx];
+        let merged_section = &text[merged_idx..];
+
+        assert!(
+            main_table.contains("claims_compliance-1"),
+            "blocking-tier MERGED finding must count toward score and render in the main table"
+        );
+        assert!(
+            !main_table.contains("copy_craft-1"),
+            "non-blocking-tier MERGED finding must not render in the main table"
+        );
+        assert!(
+            merged_section.contains("copy_craft-1"),
+            "non-blocking-tier MERGED finding must render in the Merged Findings section"
+        );
+        assert!(
+            !merged_section.contains("claims_compliance-1"),
+            "blocking-tier MERGED finding must not be duplicated into the Merged Findings section"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}

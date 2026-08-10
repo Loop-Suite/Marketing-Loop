@@ -36,3 +36,63 @@ pub fn shared_context(spec: &Spec, input: &Input) -> String {
     }
     c
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn spec() -> Spec {
+        Spec {
+            name: "t".into(),
+            context: "campaign ctx".into(),
+            lenses: vec![],
+            deterministic_checks: vec![],
+            labels: vec!["l".into()],
+            content_length_limit: 0,
+            disclaimer_required_types: vec![],
+            required_brand_terms: vec![],
+        }
+    }
+
+    fn input() -> Input {
+        Input {
+            content: String::new(),
+            content_type: "ad_copy".to_string(),
+            blocks: vec![("cta_1".to_string(), "Buy now!".to_string())],
+            word_count: 2,
+            char_count: 8,
+            requirements: None,
+            conventions: None,
+            deterministic_results: None,
+        }
+    }
+
+    /// Regression test for #19: the content-by-block section must carry an explicit warning that
+    /// the material is untrusted, not instructions — otherwise embedded instruction-like text in
+    /// the reviewed copy has no structural signal telling the model to treat it as data.
+    #[test]
+    fn shared_context_frames_content_as_untrusted() {
+        let ctx = shared_context(&spec(), &input());
+        assert!(ctx.contains("untrusted"));
+        assert!(ctx.contains("Buy now!"));
+        assert!(ctx.contains("cta_1"));
+        assert!(ctx.contains("campaign ctx"));
+    }
+
+    #[test]
+    fn shared_context_omits_optional_sections_when_absent() {
+        let ctx = shared_context(&spec(), &input());
+        assert!(!ctx.contains("## Brand guide"));
+        assert!(!ctx.contains("## Requirements\n"));
+    }
+
+    #[test]
+    fn shared_context_includes_conventions_and_requirements_when_present() {
+        let mut inp = input();
+        inp.conventions = Some("Always capitalize the brand name".to_string());
+        inp.requirements = Some("Must mention the 20% discount".to_string());
+        let ctx = shared_context(&spec(), &inp);
+        assert!(ctx.contains("Always capitalize the brand name"));
+        assert!(ctx.contains("Must mention the 20% discount"));
+    }
+}
