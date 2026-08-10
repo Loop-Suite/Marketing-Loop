@@ -333,13 +333,6 @@ fn run_review(
     println!("Starting discourse (max {} rounds)", max_rounds);
     let (audit, mut resolved) = discourse::run(llm, &sp, &findings, max_rounds)?;
 
-    // Requirements verification — pass only CONFIRMED findings
-    let confirmed_refs: Vec<&Finding> = findings
-        .iter()
-        .filter(|f| resolved.get(&f.id).map(|r| r.status.as_str()) == Some("CONFIRMED"))
-        .collect();
-    let req_results = requirements::verify(cheap_llm, &sp, &inp, &confirmed_refs)?;
-
     // Effort/time estimate (independent of the prior-round merge below).
     let effort = quantify::effort(&inp, selected.len());
     let (best, avg, worst) = quantify::time_estimate(effort);
@@ -399,6 +392,11 @@ fn run_review(
         .iter()
         .filter(|f| resolved.get(&f.id).map(|r| r.status.as_str()) == Some("CONFIRMED"))
         .collect();
+
+    // Requirements verification — computed after the prior-round merge above, from the same
+    // post-merge confirmed list, so a prior-round finding that's still open (re-confirmed above)
+    // is visible to the requirements LLM call as evidence too, not just to score/verdict/report.
+    let req_results = requirements::verify(cheap_llm, &sp, &inp, &confirmed_after_merge)?;
 
     // Quantitative summary + verdict — computed after the prior-round merge above so the console
     // output matches report.md (report::write_review below recomputes these from the same
