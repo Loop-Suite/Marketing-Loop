@@ -363,9 +363,7 @@ fn run_review(
                         // round. Namespace it so it can never collide with a same-round-generated id,
                         // which is always exactly "{lens.id}-{n}" with no "prior-" prefix.
                         let mut carried = (*orig).clone();
-                        if !carried.id.starts_with("prior-") {
-                            carried.id = format!("prior-{}", carried.id);
-                        }
+                        carried.id = prior_finding_id(&carried.id);
                         let carried_id = carried.id.clone();
                         findings.push(carried);
                         resolved.insert(
@@ -550,4 +548,29 @@ fn prepare_out(p: &PathBuf) -> Result<PathBuf> {
     std::fs::create_dir_all(p)
         .with_context(|| format!("Failed to create output directory: {}", p.display()))?;
     Ok(p.clone())
+}
+
+/// Namespaces a carried-over `--prior` finding id so it can never collide with a same-round
+/// generated id (always exactly "{lens.id}-{n}", never "prior-"-prefixed). Idempotent — a
+/// finding that's already namespaced (e.g. carried forward across multiple rounds) isn't
+/// double-prefixed. See issue #6: without this, a round's own finding id could collide with a
+/// re-confirmed --prior finding's id, silently resurrecting a REJECTED finding as CONFIRMED.
+fn prior_finding_id(id: &str) -> String {
+    if id.starts_with("prior-") {
+        id.to_string()
+    } else {
+        format!("prior-{id}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for #6.
+    #[test]
+    fn prior_finding_id_adds_prefix_once() {
+        assert_eq!(prior_finding_id("copy_craft-1"), "prior-copy_craft-1");
+        assert_eq!(prior_finding_id("prior-copy_craft-1"), "prior-copy_craft-1");
+    }
 }

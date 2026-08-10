@@ -146,3 +146,103 @@ fn trademark_symbol_check(content: &str, required: &[String]) -> (&'static str, 
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn banned_words_detects_hits() {
+        let (status, evidence) = banned_words("이 제품은 업계 1위 입니다");
+        assert_eq!(status, "FAIL");
+        assert!(evidence.contains("업계 1위"));
+    }
+
+    #[test]
+    fn banned_words_passes_clean_copy() {
+        let (status, _) = banned_words("이 제품은 좋습니다");
+        assert_eq!(status, "PASS");
+    }
+
+    #[test]
+    fn legal_claim_scan_detects_absolute_claims() {
+        let (status, evidence) = legal_claim_scan("이 약은 완치 효과가 있습니다");
+        assert_eq!(status, "FAIL");
+        assert!(evidence.contains("완치"));
+    }
+
+    #[test]
+    fn legal_claim_scan_passes_clean_copy() {
+        let (status, _) = legal_claim_scan("이 제품은 도움이 될 수 있습니다");
+        assert_eq!(status, "PASS");
+    }
+
+    #[test]
+    fn readability_score_pass_warn_fail_bands() {
+        let words = |n: usize| (0..n).map(|_| "word").collect::<Vec<_>>().join(" ");
+        assert_eq!(readability_score(&format!("{}.", words(15))).0, "PASS"); // avg 15
+        assert_eq!(readability_score(&format!("{}.", words(25))).0, "WARN"); // avg 25
+        assert_eq!(readability_score(&format!("{}.", words(35))).0, "FAIL"); // avg 35
+    }
+
+    #[test]
+    fn brand_keyword_match_requires_all_terms() {
+        let required = vec!["Acme".to_string(), "Widget".to_string()];
+        assert_eq!(
+            brand_keyword_match("Acme Widget is great", &required).0,
+            "PASS"
+        );
+        let (status, evidence) = brand_keyword_match("Acme is great", &required);
+        assert_eq!(status, "FAIL");
+        assert!(evidence.contains("Widget"));
+    }
+
+    #[test]
+    fn brand_keyword_match_passes_when_unconfigured() {
+        assert_eq!(brand_keyword_match("anything", &[]).0, "PASS");
+    }
+
+    #[test]
+    fn trademark_symbol_check_warns_without_mark_then_passes_with_it() {
+        let required = vec!["Acme".to_string()];
+        assert_eq!(trademark_symbol_check("Acme is great", &required).0, "WARN");
+        assert_eq!(
+            trademark_symbol_check("Acme® is great", &required).0,
+            "PASS"
+        );
+    }
+
+    #[test]
+    fn run_local_checks_assembles_all_five_checks() {
+        let spec = Spec {
+            name: "t".into(),
+            context: String::new(),
+            lenses: vec![],
+            deterministic_checks: vec![],
+            labels: vec!["l".into()],
+            content_length_limit: 0,
+            disclaimer_required_types: vec![],
+            required_brand_terms: vec!["Acme".to_string()],
+        };
+        let input = Input {
+            content: "Acme is great".to_string(),
+            content_type: "ad_copy".to_string(),
+            blocks: vec![],
+            word_count: 3,
+            char_count: 14,
+            requirements: None,
+            conventions: None,
+            deterministic_results: None,
+        };
+        let v = run_local_checks(&input, &spec);
+        for key in [
+            "banned_words",
+            "legal_claim_scan",
+            "readability_score",
+            "brand_keyword_match",
+            "trademark_symbol_check",
+        ] {
+            assert!(v.get(key).is_some(), "missing key: {key}");
+        }
+    }
+}

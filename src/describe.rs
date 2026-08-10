@@ -52,3 +52,36 @@ pub fn todo_sections(content: &str) -> Vec<String> {
         .map(|l| l.trim().to_string())
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for #18: Describe's required fields (no `#[serde(default)]` at all before
+    /// this fix) must tolerate an explicit JSON null the same way #9 already fixed for optional
+    /// fields elsewhere.
+    #[test]
+    fn describe_tolerates_explicit_nulls_on_required_fields() {
+        let v = serde_json::json!({
+            "title": null, "summary": null, "walkthrough": null,
+            "labels": null, "can_be_split": null, "can_be_split_note": null
+        });
+        let d: Describe =
+            serde_json::from_value(v).expect("explicit null must not crash deserialization");
+        assert_eq!(d.title, "");
+        assert!(!d.can_be_split);
+        assert!(d.labels.is_empty());
+    }
+
+    #[test]
+    fn todo_sections_detects_markers_case_insensitively() {
+        let content = "Line one\n[TBD] needs copy\nLorem Ipsum filler\nreal line";
+        let todos = todo_sections(content);
+        assert_eq!(todos.len(), 2);
+    }
+
+    #[test]
+    fn todo_sections_empty_when_no_markers() {
+        assert!(todo_sections("all real content here").is_empty());
+    }
+}

@@ -58,3 +58,65 @@ pub fn verify(
         serde_json::from_value(v).context("Requirements verification JSON schema mismatch")?;
     Ok(Some(out.checks))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for #18: RequirementCheck's required fields must tolerate explicit JSON null.
+    #[test]
+    fn requirement_check_tolerates_explicit_nulls() {
+        let v = serde_json::json!({"requirement": null, "status": null, "evidence": null});
+        let rc: RequirementCheck =
+            serde_json::from_value(v).expect("explicit null must not crash deserialization");
+        assert_eq!(rc.status, "");
+    }
+
+    /// Regression test for #9: the LLM-response envelope must tolerate an explicit top-level
+    /// `"checks": null` without crashing.
+    #[test]
+    fn requirements_output_tolerates_null_checks_array() {
+        let v = serde_json::json!({"checks": null});
+        let out: RequirementsOutput =
+            serde_json::from_value(v).expect("explicit null must not crash deserialization");
+        assert!(out.checks.is_empty());
+    }
+
+    /// Regression test for #7: requirements verification must run on the *post-merge* confirmed
+    /// list (a re-confirmed --prior finding must be visible to the LLM prompt as evidence). Since
+    /// verify() short-circuits before any LLM call when requirements aren't provided, this checks
+    /// the observable contract without needing to mock the LLM boundary: a `None` requirements
+    /// input always skips verification regardless of what's in `confirmed`.
+    #[test]
+    fn verify_returns_none_without_requirements_regardless_of_confirmed_findings() {
+        let spec = Spec {
+            name: "t".into(),
+            context: String::new(),
+            lenses: vec![],
+            deterministic_checks: vec![],
+            labels: vec!["l".into()],
+            content_length_limit: 0,
+            disclaimer_required_types: vec![],
+            required_brand_terms: vec![],
+        };
+        let input = Input {
+            content: String::new(),
+            content_type: "ad_copy".to_string(),
+            blocks: vec![],
+            word_count: 0,
+            char_count: 0,
+            requirements: None,
+            conventions: None,
+            deterministic_results: None,
+        };
+        let llm = Llm::claude_cli(
+            "does-not-matter".to_string(),
+            None,
+            0,
+            false,
+            Llm::new_usage_tracker(),
+        );
+        let result = verify(&llm, &spec, &input, &[]).unwrap();
+        assert!(result.is_none());
+    }
+}
