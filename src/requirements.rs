@@ -11,8 +11,11 @@ Do not mark a requirement MET without evidence. Respond strictly in the specifie
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequirementCheck {
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub requirement: String,
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub status: String, // MET|MISSING|AMBIGUOUS|N/A
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub evidence: String,
 }
 

@@ -98,10 +98,15 @@ pub fn select_lenses(llm: &Llm, spec: &Spec) -> Result<Vec<Lens>> {
 /// alongside is automatically skipped as an unknown field.
 #[derive(Debug, Deserialize)]
 struct RawFinding {
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     severity: String,
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     label: String,
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     claim: String,
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     evidence: String,
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     block_ref: String,
     #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     impact: String,

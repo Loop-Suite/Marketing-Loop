@@ -15,7 +15,11 @@ Respond strictly in the specified JSON schema only.";
 /// Reviewer identity (persona) is never exposed — judged solely by target_finding_id/evidence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Move {
-    #[serde(rename = "move")]
+    #[serde(
+        rename = "move",
+        default,
+        deserialize_with = "crate::llm::null_as_default"
+    )]
     pub kind: String, // AGREE|CHALLENGE|CONNECT|SURFACE
     // SURFACE describes a newly-discovered issue by definition, so it has no existing finding to
     // point at — the model legitimately omits this field for that move kind (or sends `null`).
