@@ -69,15 +69,17 @@ pub fn write_review(
 ) -> Result<()> {
     let mut md = String::new();
 
-    // Only CONFIRMED findings are adopted (shared by the Findings table and verdict/score computation).
+    // CONFIRMED findings, plus blocking-tier findings MERGED via discourse CONNECT (#17) — shared
+    // by the Findings table and verdict/score computation, so the table always mirrors exactly
+    // what feeds the numbers below.
     let mut confirmed: Vec<&Finding> = findings
         .iter()
-        .filter(|f| resolved.get(&f.id).map(|r| r.status.as_str()) == Some("CONFIRMED"))
+        .filter(|f| quantify::counts_toward_score(f, resolved, spec))
         .collect();
     confirmed.sort_by_key(|f| severity_rank(&f.severity));
 
     let verdict = quantify::verdict(&confirmed, policies, requirements);
-    let score = quantify::score(findings, resolved);
+    let score = quantify::score(findings, resolved, spec);
     let effort = quantify::effort(input, selected_lenses.len());
     let (time_best, time_average, time_worst) = quantify::time_estimate(effort);
 
@@ -200,12 +202,17 @@ pub fn write_review(
         md.push('\n');
     }
 
-    // MERGED findings are excluded from the main Findings table (only CONFIRMED is shown there)
-    // but discourse.rs's own comment says a merged finding "stays in the findings list,
-    // cross-referenced" — so it needs somewhere to actually be visible, same as Rejected/Uncertain.
+    // MERGED findings that don't count toward score (non-blocking-tier — see #17) are excluded
+    // from the main Findings table, but discourse.rs's own comment says a merged finding "stays in
+    // the findings list, cross-referenced" — so it needs somewhere to actually be visible, same as
+    // Rejected/Uncertain. Blocking-tier MERGED findings already appear in the main Findings table
+    // above (they count toward score), so they're not repeated here.
     let merged: Vec<&Finding> = findings
         .iter()
-        .filter(|f| resolved.get(&f.id).map(|r| r.status.as_str()) == Some("MERGED"))
+        .filter(|f| {
+            resolved.get(&f.id).map(|r| r.status.as_str()) == Some("MERGED")
+                && !quantify::counts_toward_score(f, resolved, spec)
+        })
         .collect();
     if !merged.is_empty() {
         md.push_str("### Merged Findings\n\n");

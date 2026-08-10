@@ -3,6 +3,7 @@ use crate::input::Input;
 use crate::lens::Finding;
 use crate::policy;
 use crate::requirements;
+use crate::spec::Spec;
 use std::collections::HashMap;
 
 /// Penalty amounts. Kept as quantify.rs hardcoded values, unchanged (design-spec.md §6 — no extension allowed).
@@ -16,11 +17,36 @@ pub fn severity_penalty(s: &str) -> i64 {
     }
 }
 
-/// Deducts points from 100, counting only CONFIRMED findings.
-pub fn score(findings: &[Finding], resolved: &HashMap<String, discourse::Resolution>) -> i64 {
+/// Whether a finding should weigh on score/verdict: always for CONFIRMED, and for MERGED only
+/// when the finding's originating lens is `tier = "blocking"` in the spec (e.g. claims_compliance).
+/// A discourse CONNECT consolidates related findings — it does not dismiss them (see
+/// discourse.rs's own comment on Resolution) — so a still-real blocking-tier violation must not
+/// lose its scoring weight just because it was CONNECTed into another finding. Non-blocking-tier
+/// MERGED findings keep the original consolidation behavior (excluded here). See issue #17.
+pub fn counts_toward_score(
+    f: &Finding,
+    resolved: &HashMap<String, discourse::Resolution>,
+    spec: &Spec,
+) -> bool {
+    match resolved.get(&f.id).map(|r| r.status.as_str()) {
+        Some("CONFIRMED") => true,
+        Some("MERGED") => spec
+            .lens_by_id(&f.lens)
+            .map(|l| l.tier == "blocking")
+            .unwrap_or(false),
+        _ => false,
+    }
+}
+
+/// Deducts points from 100, counting CONFIRMED findings and blocking-tier MERGED findings (#17).
+pub fn score(
+    findings: &[Finding],
+    resolved: &HashMap<String, discourse::Resolution>,
+    spec: &Spec,
+) -> i64 {
     let mut total = 100i64;
     for f in findings {
-        if resolved.get(&f.id).map(|r| r.status.as_str()) == Some("CONFIRMED") {
+        if counts_toward_score(f, resolved, spec) {
             total -= severity_penalty(&f.severity);
         }
     }
