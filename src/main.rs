@@ -326,7 +326,7 @@ fn run_review(
     // Deterministic checks: if a --deterministic-results file is already injected, prefer that;
     // otherwise fill it via local computation (checks::run_local_checks).
     if inp.deterministic_results.is_none() {
-        inp.deterministic_results = Some(checks::run_local_checks(&inp, &sp));
+        inp.deterministic_results = Some(checks::run_local_checks(&inp, &sp, &policies));
     }
 
     // discourse cross-validation

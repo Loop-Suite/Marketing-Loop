@@ -2,7 +2,7 @@
 
 A Rust CLI that ports [Code-Review-Loop](https://github.com/Loop-Suite/Code-Review-Loop)'s pattern — **independent persona review → anonymized discourse cross-check → deterministic verdict** — from code review onto marketing content: ad copy, landing pages, email, social posts, and blog posts.
 
-> **Status.** This repository's GitHub description still calls it a "pre-implementation design document." That framing is out of date: `src/` contains 18 Rust source files (`Cargo.lock` present) implementing the full `review` pipeline plus `describe`/`improve`/`ask` subcommands. It is a working CLI, not just a design draft — but it has **no automated tests and no CI workflow** in this snapshot, and several pieces described in `docs/design-spec.md` were simplified or not carried through into the actual code (see [Known gaps](#known-gaps--where-docs-and-code-diverge)). This README documents what is actually in `src/` and `specs/default.toml`, not the earlier design proposal where the two disagree.
+> **Status.** This repository's GitHub description still calls it a "pre-implementation design document." That framing is out of date: `src/` contains 18 Rust source files (`Cargo.lock` present) implementing the full `review` pipeline plus `describe`/`improve`/`ask` subcommands. It is a working CLI, not just a design draft — it has **74 automated unit tests** (`cargo test`) and a **CI workflow** (`.github/workflows/ci.yml`, running `cargo fmt --check`, `cargo check`, and `cargo test` on every push/PR to `main`; see `evals/README.md` for how the suite was built up), though several pieces described in `docs/design-spec.md` were simplified or not carried through into the actual code (see [Known gaps](#known-gaps--where-docs-and-code-diverge)). This README documents what is actually in `src/` and `specs/default.toml`, not the earlier design proposal where the two disagree.
 
 ## What it does
 
@@ -326,8 +326,7 @@ docs/research-and-evidence-survey-2026-07-29.md   survey of adjacent OSS/marketi
 
 ## Known gaps / where docs and code diverge
 
-- No automated tests and no CI workflow exist in this repository snapshot.
-- Only 5 of the 12 `deterministic_checks` declared in `specs/default.toml` are actually computed by `checks.rs`; the rest render `NOT_RUN` in `report.md` unless supplied via `--deterministic-results`.
+- 7 of the 12 `deterministic_checks` declared in `specs/default.toml` are actually computed: `banned_words`, `legal_claim_scan`, `readability_score`, `brand_keyword_match`, `trademark_symbol_check` (`checks.rs`), plus `required_disclaimer_check` and `channel_length_limit` (computed by `policy.rs`, folded into the deterministic-checks table). The remaining 5 — `spelling_grammar_check`, `link_url_validity`, `pii_scan`, `duplicate_content_check`, `accessibility_contrast` — each need a real external tool integration (LanguageTool, linkinator, gitleaks-style patterns, simhash, pa11y/axe-core) and still render `NOT_RUN` in `report.md` unless supplied via `--deterministic-results`; tracked in [#31](https://github.com/Loop-Suite/Marketing-Loop/issues/31).
 - `readability_score` is a words-per-sentence approximation, not a real Flesch-Kincaid/Reading-Ease calculation.
 - The persona roster that ships in `specs/default.toml` (Handley/`brand_voice`, Fishkin/`seo`, Tushnet/`claims_compliance`, Laja/`conversion_cro`, Godin/`audience_fit`, Dunford/`positioning`, Ogilvy/`copy_craft`) differs from the earlier roster proposed in `docs/design-spec.md` (which paired different personas, e.g. Cialdini and Hopkins, to lens ids like `clarity_style`/`cross_channel_consistency` that don't exist in the shipped spec).
 - `lens.rs`'s selection prompt asks for **1-3** optional lenses per run, not the "3-5" figure quoted in `docs/design-spec.md`.
