@@ -1,13 +1,24 @@
 use crate::input::Input;
+use crate::policy::PolicyResult;
 use crate::spec::Spec;
 
 /// Counterpart to the original semgrep.rs (local deterministic checks). Computed with pure Rust
-/// string matching, no external tools. Covers only the "self-implemented" subset of
-/// design-spec.md §3 deterministic_checks (banned_words/legal_claim_scan/
-/// readability_score/brand_keyword_match/trademark_symbol_check) — the rest (spelling, links,
-/// accessibility, etc.) needs existing external tool integration and isn't handled at this stage
-/// (can be injected separately via deterministic_results on input).
-pub fn run_local_checks(input: &Input, spec: &Spec) -> serde_json::Value {
+/// string matching, no external tools. Covers the "self-implemented" subset of design-spec.md §3
+/// deterministic_checks: banned_words/legal_claim_scan/readability_score/brand_keyword_match/
+/// trademark_symbol_check are computed directly here; required_disclaimer_check/
+/// channel_length_limit are folded in from `policy::check_all`'s results (the same logic already
+/// runs for the policy-gate verdict — this just also surfaces it in the deterministic-checks
+/// table instead of leaving it NOT_RUN). The remaining 5
+/// (spelling_grammar_check/link_url_validity/pii_scan/duplicate_content_check/
+/// accessibility_contrast) need real external tool integration (LanguageTool/linkinator/
+/// gitleaks-style patterns/simhash/pa11y/axe-core) and are out of scope here — see README's
+/// Known gaps and https://github.com/Loop-Suite/Marketing-Loop/issues for tracking. They render
+/// NOT_RUN unless supplied via --deterministic-results.
+pub fn run_local_checks(
+    input: &Input,
+    spec: &Spec,
+    policies: &[PolicyResult],
+) -> serde_json::Value {
     let (bw_status, bw_evidence) = banned_words(&input.content);
     let (lc_status, lc_evidence) = legal_claim_scan(&input.content);
     let (rs_status, rs_evidence) = readability_score(&input.content);
@@ -15,13 +26,36 @@ pub fn run_local_checks(input: &Input, spec: &Spec) -> serde_json::Value {
     let (ts_status, ts_evidence) =
         trademark_symbol_check(&input.content, &spec.required_brand_terms);
 
-    serde_json::json!({
+    let mut result = serde_json::json!({
         "banned_words": {"status": bw_status, "evidence": bw_evidence},
         "legal_claim_scan": {"status": lc_status, "evidence": lc_evidence},
         "readability_score": {"status": rs_status, "evidence": rs_evidence},
         "brand_keyword_match": {"status": bk_status, "evidence": bk_evidence},
         "trademark_symbol_check": {"status": ts_status, "evidence": ts_evidence},
-    })
+    });
+
+    if let Some(obj) = result.as_object_mut() {
+        if let Some(p) = policies
+            .iter()
+            .find(|p| p.check == "Required disclaimer present")
+        {
+            obj.insert(
+                "required_disclaimer_check".to_string(),
+                serde_json::json!({"status": p.status.label(), "evidence": p.evidence}),
+            );
+        }
+        if let Some(p) = policies
+            .iter()
+            .find(|p| p.check == "Content length within limit")
+        {
+            obj.insert(
+                "channel_length_limit".to_string(),
+                serde_json::json!({"status": p.status.label(), "evidence": p.evidence}),
+            );
+        }
+    }
+
+    result
 }
 
 /// Banned-word / exaggerated-superlative scan. Assumption: the word list is example-level only
@@ -234,7 +268,7 @@ mod tests {
             conventions: None,
             deterministic_results: None,
         };
-        let v = run_local_checks(&input, &spec);
+        let v = run_local_checks(&input, &spec, &[]);
         for key in [
             "banned_words",
             "legal_claim_scan",
@@ -244,5 +278,49 @@ mod tests {
         ] {
             assert!(v.get(key).is_some(), "missing key: {key}");
         }
+    }
+
+    /// Regression test: required_disclaimer_check / channel_length_limit must no longer render
+    /// NOT_RUN when policy::check_all already computed them — see README Known gaps.
+    #[test]
+    fn run_local_checks_folds_in_policy_results_for_disclaimer_and_length() {
+        let spec = Spec {
+            name: "t".into(),
+            context: String::new(),
+            lenses: vec![],
+            deterministic_checks: vec![],
+            labels: vec!["l".into()],
+            content_length_limit: 0,
+            disclaimer_required_types: vec![],
+            required_brand_terms: vec![],
+        };
+        let input = Input {
+            content: "hello".to_string(),
+            content_type: "ad_copy".to_string(),
+            blocks: vec![],
+            word_count: 1,
+            char_count: 5,
+            requirements: None,
+            conventions: None,
+            deterministic_results: None,
+        };
+        let policies = vec![
+            PolicyResult {
+                check: "Required disclaimer present".to_string(),
+                status: crate::policy::PolicyStatus::Pass,
+                evidence: "Disclaimer phrase found: 'unsubscribe'".to_string(),
+            },
+            PolicyResult {
+                check: "Content length within limit".to_string(),
+                status: crate::policy::PolicyStatus::Fail,
+                evidence: "char_count 500 > threshold 100".to_string(),
+            },
+        ];
+        let v = run_local_checks(&input, &spec, &policies);
+        assert_eq!(
+            v["required_disclaimer_check"]["status"].as_str(),
+            Some("PASS")
+        );
+        assert_eq!(v["channel_length_limit"]["status"].as_str(), Some("FAIL"));
     }
 }
