@@ -103,15 +103,15 @@ struct RawFinding {
     claim: String,
     evidence: String,
     block_ref: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     impact: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     recommendation: String,
 }
 
 #[derive(Debug, Default, Deserialize)]
 struct LensOutput {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     findings: Vec<RawFinding>,
 }
 

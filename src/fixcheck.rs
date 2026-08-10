@@ -17,7 +17,7 @@ pub struct FixResult {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct FixCheckOutput {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     results: Vec<FixResult>,
 }
 

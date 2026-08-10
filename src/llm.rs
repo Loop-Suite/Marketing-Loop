@@ -418,6 +418,21 @@ fn call_openrouter(
 }
 
 /// Extracts just the JSON object (or array) from a response mixed with code fences/chatter.
+/// `#[serde(default)]` alone only supplies a default when a key is *missing* — it does not accept
+/// an explicit JSON `null` for that key. Smaller/faster models routinely emit an explicit `null`
+/// for a "not applicable right now" string/array field (e.g. an evidence field on a move that
+/// doesn't carry evidence) instead of omitting the key or emitting `""`/`[]`, which would otherwise
+/// fail `serde_json::from_value` outside any retry loop and abort the whole run. Pair this with
+/// `#[serde(default, deserialize_with = "null_as_default")]` on any field populated directly from
+/// LLM JSON to treat `null` the same as a missing key.
+pub fn null_as_default<'de, D, T>(deserializer: D) -> std::result::Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + serde::Deserialize<'de>,
+{
+    Ok(<Option<T> as serde::Deserialize>::deserialize(deserializer)?.unwrap_or_default())
+}
+
 pub fn extract_json(raw: &str) -> Result<serde_json::Value> {
     let t = raw.trim();
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(t) {

@@ -17,10 +17,13 @@ Respond strictly in the specified JSON schema only.";
 pub struct Move {
     #[serde(rename = "move")]
     pub kind: String, // AGREE|CHALLENGE|CONNECT|SURFACE
+    // SURFACE describes a newly-discovered issue by definition, so it has no existing finding to
+    // point at — the model legitimately omits this field for that move kind (or sends `null`).
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub target_finding_id: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub new_evidence: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub detail: String,
 }
 
@@ -64,7 +67,7 @@ fn build_round_prompt(spec: &Spec, findings: &[Finding], round: usize) -> String
          - AGREE: only when there is new evidence not already in the target finding. new_evidence must be filled with that evidence.\n\
          - CHALLENGE: at least once this round. Rebut specifically in detail using one of evidence/counterexample/scope/severity/assumption.\n\
          - CONNECT: name two or more related finding ids in detail and describe the cause/effect relationship.\n\
-         - SURFACE: describe a newly discovered issue in detail along with evidence.\n\
+         - SURFACE: describe a newly discovered issue in detail along with evidence. It has no existing target, so leave target_finding_id as an empty string \"\".\n\
          - Do not produce agreement/rebuttal without substance.\n\n\
          ## Output (JSON only, no code fence)\n\
          {{\"moves\":[{{\"move\":\"AGREE|CHALLENGE|CONNECT|SURFACE\",\"target_finding_id\":\"...\",\
@@ -77,7 +80,7 @@ fn build_round_prompt(spec: &Spec, findings: &[Finding], round: usize) -> String
 
 #[derive(Debug, Default, Deserialize)]
 struct MovesResponse {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     moves: Vec<Move>,
 }
 

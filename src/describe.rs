@@ -14,10 +14,10 @@ pub struct Describe {
     pub title: String,
     pub summary: String,
     pub walkthrough: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub labels: Vec<String>,
     pub can_be_split: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub can_be_split_note: String,
 }
 

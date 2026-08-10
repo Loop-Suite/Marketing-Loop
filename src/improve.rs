@@ -22,7 +22,7 @@ pub struct Suggestion {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct ImproveOutput {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     suggestions: Vec<Suggestion>,
 }
 

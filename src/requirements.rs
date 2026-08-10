@@ -18,7 +18,7 @@ pub struct RequirementCheck {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct RequirementsOutput {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     checks: Vec<RequirementCheck>,
 }
 
