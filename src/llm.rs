@@ -365,24 +365,32 @@ fn call_openrouter(
     });
 
     let result = ureq::post(OPENROUTER_URL)
-        .set("Authorization", &format!("Bearer {api_key}"))
-        .set("Content-Type", "application/json")
+        .header("Authorization", &format!("Bearer {api_key}"))
+        .header("Content-Type", "application/json")
+        // ureq 3.x defaults to turning 4xx/5xx into `Error::StatusCode` with no body attached.
+        // Disable that so we can read the response body ourselves for both success and error cases.
+        .config()
+        .http_status_as_error(false)
+        .build()
         .send_json(body);
 
-    let resp = match result {
+    let mut resp = match result {
         Ok(r) => r,
-        Err(ureq::Error::Status(code, r)) => {
-            let body = r.into_string().unwrap_or_default();
-            return Err(anyhow!(
-                "openrouter response code {code}: {}",
-                truncate(&body, 400)
-            ));
-        }
         Err(e) => return Err(anyhow!("openrouter call failed: {e}")),
     };
 
+    if !resp.status().is_success() {
+        let code = resp.status().as_u16();
+        let body = resp.body_mut().read_to_string().unwrap_or_default();
+        return Err(anyhow!(
+            "openrouter response code {code}: {}",
+            truncate(&body, 400)
+        ));
+    }
+
     let v: serde_json::Value = resp
-        .into_json()
+        .body_mut()
+        .read_json()
         .context("Failed to parse openrouter response JSON")?;
     let content = v
         .get("choices")
