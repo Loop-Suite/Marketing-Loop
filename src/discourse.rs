@@ -66,7 +66,7 @@ fn build_round_prompt(spec: &Spec, findings: &[Finding], round: usize) -> String
          - Each move is one of AGREE/CHALLENGE/CONNECT/SURFACE; specify the target finding id in target_finding_id.\n\
          - AGREE: only when there is new evidence not already in the target finding. new_evidence must be filled with that evidence.\n\
          - CHALLENGE: at least once this round. Rebut specifically in detail using one of evidence/counterexample/scope/severity/assumption.\n\
-         - CONNECT: name two or more related finding ids in detail and describe the cause/effect relationship.\n\
+         - CONNECT: relates two or more findings. List ALL of their ids in target_finding_id, comma-separated (e.g. \"id1,id2\"), and describe the cause/effect relationship in detail.\n\
          - SURFACE: describe a newly discovered issue in detail along with evidence. It has no existing target, so leave target_finding_id as an empty string \"\".\n\
          - Do not produce agreement/rebuttal without substance.\n\n\
          ## Output (JSON only, no code fence)\n\
@@ -102,6 +102,17 @@ fn run_round_call(
     })
 }
 
+/// CONNECT relates two or more findings at once (per the prompt's instruction), so unlike
+/// AGREE/CHALLENGE (always exactly one target), target_finding_id for a CONNECT move is a
+/// comma-separated list of ids, e.g. "seo-1,copy_craft-2". Splits and trims it into individual ids.
+fn connect_target_ids(target_finding_id: &str) -> Vec<&str> {
+    target_finding_id
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
 /// Computes the final Resolution per finding_id, factoring in only moves that weren't invalidated.
 /// Priority: valid CHALLENGE (unrebutted) > CONNECT > only valid AGREE present > default UNCERTAIN.
 fn resolve_findings(
@@ -123,7 +134,10 @@ fn resolve_findings(
                 .collect();
             let connects: Vec<&&Move> = all_moves
                 .iter()
-                .filter(|m| m.kind == "CONNECT" && m.target_finding_id == f.id)
+                .filter(|m| {
+                    m.kind == "CONNECT"
+                        && connect_target_ids(&m.target_finding_id).contains(&f.id.as_str())
+                })
                 .collect();
             let valid_agrees: Vec<&&Move> = all_moves
                 .iter()
