@@ -12,11 +12,17 @@ Respond strictly in the specified JSON schema only.";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Suggestion {
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub relevant_block: String,
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub existing_content: String,
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub suggestion_content: String,
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub improved_content: String,
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub one_sentence_summary: String,
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub label: String,
 }
 

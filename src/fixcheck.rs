@@ -10,8 +10,11 @@ Respond strictly in the specified JSON schema only.";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FixResult {
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub finding_id: String,
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub status: String, // FIXED|STILL_OPEN|UNKNOWN
+    #[serde(default, deserialize_with = "crate::llm::null_as_default")]
     pub evidence: String,
 }
 
