@@ -300,7 +300,7 @@ fn run_review(
             }
             selected
         }
-        None => lens::select_lenses(cheap_llm, &sp)?,
+        None => lens::select_lenses(cheap_llm, &sp, content_type)?,
     };
     for l in sp.always_lenses() {
         if !selected.iter().any(|x| x.id == l.id) {
