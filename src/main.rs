@@ -343,16 +343,7 @@ fn run_review(
         None => (0, None),
         Some(p) => {
             let ps = state::load(p)?;
-            let prior_confirmed: Vec<&Finding> = ps
-                .findings
-                .iter()
-                .filter(|f| {
-                    ps.resolved
-                        .get(&f.id)
-                        .map(|r| r.status == "CONFIRMED")
-                        .unwrap_or(false)
-                })
-                .collect();
+            let prior_confirmed: Vec<&Finding> = prior_findings_to_recheck(&ps, &sp);
             let fr = fixcheck::run(cheap_llm, &sp, &inp.content, &prior_confirmed)?;
             for item in &fr {
                 if item.status == "STILL_OPEN" {
@@ -550,6 +541,18 @@ fn prepare_out(p: &PathBuf) -> Result<PathBuf> {
     Ok(p.clone())
 }
 
+/// Findings from a `--prior` round that fix-check should re-verify: whatever counted toward that
+/// round's own score/verdict (`quantify::counts_toward_score`, #17) — not just a literal
+/// `CONFIRMED` status, so a blocking-tier finding that scored via `MERGED` there isn't silently
+/// dropped from cross-round tracking. See issue #27.
+fn prior_findings_to_recheck<'a>(state: &'a state::State, spec: &Spec) -> Vec<&'a Finding> {
+    state
+        .findings
+        .iter()
+        .filter(|f| quantify::counts_toward_score(f, &state.resolved, spec))
+        .collect()
+}
+
 /// Namespaces a carried-over `--prior` finding id so it can never collide with a same-round
 /// generated id (always exactly "{lens.id}-{n}", never "prior-"-prefixed). Idempotent — a
 /// finding that's already namespaced (e.g. carried forward across multiple rounds) isn't
@@ -566,11 +569,90 @@ fn prior_finding_id(id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::discourse::Resolution;
+    use crate::spec::Lens;
+    use std::collections::HashMap;
 
     /// Regression test for #6.
     #[test]
     fn prior_finding_id_adds_prefix_once() {
         assert_eq!(prior_finding_id("copy_craft-1"), "prior-copy_craft-1");
         assert_eq!(prior_finding_id("prior-copy_craft-1"), "prior-copy_craft-1");
+    }
+
+    fn test_lens(id: &str, tier: &str) -> Lens {
+        Lens {
+            id: id.to_string(),
+            title: id.to_string(),
+            guide: String::new(),
+            always: false,
+            signal: String::new(),
+            persona_name: String::new(),
+            persona_voice: String::new(),
+            tier: tier.to_string(),
+        }
+    }
+
+    fn test_finding(id: &str, lens: &str) -> Finding {
+        Finding {
+            id: id.to_string(),
+            lens: lens.to_string(),
+            persona: "persona".to_string(),
+            severity: "P1".to_string(),
+            label: lens.to_string(),
+            block_ref: "b:0".to_string(),
+            claim: "claim".to_string(),
+            evidence: "evidence".to_string(),
+            impact: String::new(),
+            recommendation: String::new(),
+        }
+    }
+
+    /// Regression test for #27: a blocking-tier finding that scored via MERGED in the prior
+    /// round (per #17) must still be picked up for --prior fix-check re-verification, not just
+    /// findings with a literal CONFIRMED status.
+    #[test]
+    fn prior_findings_to_recheck_includes_blocking_tier_merged() {
+        let spec = Spec {
+            name: "t".into(),
+            context: String::new(),
+            lenses: vec![
+                test_lens("claims_compliance", "blocking"),
+                test_lens("copy_craft", "standard"),
+            ],
+            deterministic_checks: vec![],
+            labels: vec!["l".into()],
+            content_length_limit: 0,
+            disclaimer_required_types: vec![],
+            required_brand_terms: vec![],
+        };
+        let mut resolved: HashMap<String, Resolution> = HashMap::new();
+        resolved.insert(
+            "claims_compliance-1".to_string(),
+            Resolution {
+                status: "MERGED".to_string(),
+                evidence: String::new(),
+            },
+        );
+        resolved.insert(
+            "copy_craft-1".to_string(),
+            Resolution {
+                status: "MERGED".to_string(),
+                evidence: String::new(),
+            },
+        );
+        let state = state::State {
+            round: 0,
+            findings: vec![
+                test_finding("claims_compliance-1", "claims_compliance"),
+                test_finding("copy_craft-1", "copy_craft"),
+            ],
+            resolved,
+        };
+
+        let recheck = prior_findings_to_recheck(&state, &spec);
+        let ids: Vec<&str> = recheck.iter().map(|f| f.id.as_str()).collect();
+        assert!(ids.contains(&"claims_compliance-1"));
+        assert!(!ids.contains(&"copy_craft-1"));
     }
 }
