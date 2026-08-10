@@ -336,13 +336,17 @@ docs/research-and-evidence-survey-2026-07-29.md   survey of adjacent OSS/marketi
 
 ## Real-world validation
 
-The pipeline above wasn't just read, it was reviewed and then actually run. Three rounds (two
-static code-reading passes, one round of real `codereview review` executions against a synthetic
-ad-copy fixture) found **9 issues, all fixed**, for a real total cost of **~$1.0–$1.2**. Every
-number is read off actual CLI cost output or computed from a saved `report.md` — nothing
-estimated from memory.
+The pipeline above wasn't just read — it was reviewed, hardened, and actually run, twice. An
+initial validation pass (two static code-reading passes, one round of real `codereview review`
+executions) found 9 issues; a later **production-hardening round** (an adversarial third static
+pass, this repo's first unit test suite, a tagged `v0.1.0` release, and a second real-execution
+pass that chained two rounds together with `--prior`) found 5 more. **14 issues total, all
+fixed**, for a real combined execution cost of **~$1.78–$1.98**. Every dollar figure is read off
+actual CLI cost output, computed from a saved `report.md`, or — for the second execution pass —
+read directly off live console output during the session (not saved to a log in this snapshot).
+This repo now also has 73 unit tests (previously zero) and a `CHANGELOG.md`.
 
-The two findings worth calling out:
+Findings worth calling out:
 
 - **A finding-id collision silently distorted the verdict.** A round's own local finding id could
   collide with a re-confirmed `--prior` finding's id, letting a `REJECTED` finding get resurrected
@@ -353,6 +357,22 @@ The two findings worth calling out:
   supposed to populate it never matched anything, because the model returns multiple target
   finding ids as one comma-joined string against a field typed to hold only one. The section
   looked correct and was silently empty in every real run until this was found.
+- **A blocking-tier compliance violation could discourse-merge its way to a 100/100 score — and
+  now can't.** Real `claims_compliance` findings (unsubstantiated efficacy/guarantee claims) lost
+  all scoring weight the moment discourse `CONNECT`ed them, observed directly on a real run.
+  Decided and fixed: blocking-tier findings now count toward score/verdict even when merged;
+  non-blocking-tier findings keep the original consolidation behavior. Re-validated on a real
+  chained run: two merged `claims_compliance` findings correctly held the score at 76/100 instead
+  of the 100/100 they'd have produced before the fix.
+- **The `--prior` round-chaining that fix depended on had its own gap.** A blocking-tier finding
+  scored via `MERGED` (not `CONFIRMED`) was invisible to the next round's fix-check tracking — no
+  "Vs. previous round" section rendered at all, even though the prior round had real,
+  score-affecting findings to carry forward. Fixed and covered by a regression test; not
+  re-validated against another paid run.
+
+**The tagged `v0.1.0` release is stale**: it was cut before the second execution pass, so the
+lens-selection crash fix and the `--prior` tracking-gap fix above exist only on `main`, not in the
+`v0.1.0` tag.
 
 Full methodology, every raw number, and everything else that went wrong along the way:
 [evals/README.md](evals/README.md).

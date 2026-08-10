@@ -9,8 +9,13 @@ to check whether the fixes held up outside of reading the code, including chaini
 with `--prior`.
 
 Every number below is either read directly off the CLI's own console cost line or computed from a
-saved `report.md`, with one labeled exception in the cost table. Nothing here is estimated from
+saved `report.md`, with labeled exceptions in the cost table. Nothing here is estimated from
 memory.
+
+A later **production-hardening round** added a fourth, adversarial static pass (#17–#19); this
+repo's first unit test suite (73 tests, #23); a tagged `v0.1.0` release (`CHANGELOG.md`, #24); and
+a second real-execution pass (#25, #27) that specifically re-validated the fourth pass's fixes
+against actual model output, not just a unit test. See "Round 4" onward below.
 
 ## TL;DR
 
@@ -20,7 +25,11 @@ memory.
 | Round 2 — deeper static review | Code reading only, closer second pass | 3 (#6, #7, #8) | $0 |
 | Round 3 — real CLI execution review | 4 successful `codereview review` runs + 3 crash-and-retry runs while triaging | 2 (#9, #10) | ~$1.0–$1.2 (uncertain — see Cost) |
 | Round-chaining validation | Same 4 real runs as Round 3 | 0 new issues — confirms #2/#4/#6/#8 hold under real chained `--prior` use | (included above) |
-| **Total** | | **9 issues opened, all closed** | **~$1.0–$1.2** |
+| **Subtotal — initial validation pass** | | **9 issues opened, all closed** | **~$1.0–$1.2** |
+| Round 4 — adversarial re-audit | Code reading only, third static pass, deliberately re-opening prior rounds' open questions | 3 (#17, #18, #19) | $0 |
+| Unit test suite | No new execution — 73 unit tests added, all prior numbered fixes (#2, #3, #5, #6, #9, #10, #17, #18, #19) covered as regressions | 0 new issues | $0 |
+| Round 5 — real execution validation, take 2 | 2 chained `codereview review` runs (`--backend claude-cli --model haiku`) + 1 crash-and-fix cycle | 2 (#25, #27) | $0.7754 |
+| **Grand total — all rounds** | | **14 issues opened, all closed** | **~$1.78–$1.98** |
 
 **What this bought:**
 
@@ -171,9 +180,16 @@ than assumed:
   consistent (APPROVE 100/100) but its console output wasn't saved to a separate log, so that one
   run's match isn't independently file-verifiable here, only observed live during the session.
 
-## Known limitation — MERGED findings are invisible to scoring
+## Known limitation — MERGED findings were invisible to scoring (resolved in #17)
 
-**Not filed as an issue. Further judgment call needed before touching this.**
+**Resolved.** This was originally recorded below as a deliberate non-fix — "genuinely unclear
+whether this is a bug or the intended design," not filed as an issue. The production-hardening
+round's adversarial re-audit (see "Round 4" below) revisited it and decided: blocking-tier
+findings (`tier = "blocking"` in the spec, e.g. `claims_compliance`) now count toward
+score/verdict even when discourse `CONNECT`s them into another finding; non-blocking-tier
+findings keep the original consolidation-only behavior. Fixed in #17/#20, confirmed against real
+model output (not just a unit test) in "Round 5" below. Original record of the gap, kept verbatim
+below for the trade-off reasoning it documents:
 
 `quantify::score`/`verdict` only aggregate findings with status `CONFIRMED`. A finding with status
 `MERGED` (the outcome of a discourse `CONNECT`, see #8/#10 above) contributes nothing to the score
@@ -205,6 +221,133 @@ Both point at real, different fixes, and picking wrong risks either double-count
 duplicates or breaking the discourse consolidation mechanism that #10 just made actually work.
 Recorded here as a real, measured gap rather than guessed at or silently patched.
 
+## Round 4 — adversarial re-audit (#17–#19)
+
+A third static-review pass, adversarial in intent: re-reading the pipeline specifically looking
+for what earlier passes had rationalized away, left as an open question, or not looked at from a
+security angle. Three issues found, each fixed in its own PR: #20 (`e444169`), #21 (`5f246dd`),
+#22 (`38d9e4e`).
+
+- **[#17](https://github.com/Loop-Suite/Marketing-Loop/issues/17) — the "Known limitation" above
+  was actually decided, not just recorded.** Round 3 found that a `tier = "blocking"` finding
+  (e.g. `claims_compliance`) merged via discourse `CONNECT` was invisible to
+  `quantify::score`/`verdict`, letting a real, unaddressed compliance violation resolve to
+  `APPROVE`. Left open at the time because two readings were both defensible (see "Known
+  limitation" above). This pass decided it: `quantify::counts_toward_score` now also counts
+  `MERGED` findings whose originating lens is blocking-tier; non-blocking-tier `MERGED` findings
+  keep the original consolidation-only behavior. **Trade-off made explicit, not hidden**: if
+  multiple blocking-tier findings `CONNECT` into each other, each one's severity is still
+  deducted independently — no de-duplication of the penalty across a merge chain. Chosen
+  deliberately: false leniency (a real compliance violation silently scoring 100/100 because it
+  happened to get merged) is judged worse than a possibly-inflated deduction. Fixed in
+  `e444169`/#20.
+- **[#18](https://github.com/Loop-Suite/Marketing-Loop/issues/18) — the same crash class as #9,
+  on fields #9 never touched.** #9 fixed "explicit JSON `null` crashes the whole run and discards
+  every finding already computed," but only for fields that already had a bare
+  `#[serde(default)]`. Fields with no `#[serde(default)]` at all — still `required`, and still
+  exposed to the identical crash — were outside #9's fix scope: `Move.kind`, a raw finding's
+  severity/label/claim/evidence/block_ref, `describe.rs`'s
+  title/summary/walkthrough/can_be_split, `improve.rs`'s `Suggestion` (6 fields), `fixcheck.rs`'s
+  `FixResult` (finding_id/status/evidence), and `requirements.rs`'s `RequirementCheck`
+  (requirement/status/evidence) — 6 structs across 6 files. Fixed once in `5f246dd`/#21 by
+  applying the same `null_as_default` deserializer #9 established, instead of 6 separate patches.
+- **[#19](https://github.com/Loop-Suite/Marketing-Loop/issues/19) — the marketing copy under
+  review was spliced into every LLM prompt with no framing distinguishing it from instructions.**
+  The content being reviewed — authored by the party with the strongest incentive to get an
+  `APPROVE` — was embedded verbatim in every prompt, with no delimiter or note marking it as data
+  rather than instructions: a real prompt-injection surface, not a hypothetical one, given this
+  tool exists specifically to catch problems in that same copy. Fixed in `38d9e4e`/#22 by adding
+  an explicit note ahead of the content block(s) at both call sites (`shared_context` and
+  fixcheck's hand-built context): this is untrusted material submitted for review, and any
+  embedded instruction-like text inside it is itself grounds for a finding, never something to
+  obey. Defense-in-depth — explicitly not a complete prompt-injection defense.
+
+## Unit test suite (#23)
+
+This repo had zero tests before this round. #23 (`589ba02`) added 71 unit tests in one PR
+covering `state.rs`, `quantify.rs`, `checks.rs`/`policy.rs`, and `discourse.rs`'s core logic, plus
+explicit-JSON-null deserialization tolerance on every LLM-facing struct. Two more tests were added
+incidentally by the fixes below (#26, #28), bringing the current total to **73**.
+
+Every numbered issue from both this round and the original validation pass that's expressible
+without mocking the `Llm` subprocess boundary is now covered as a regression test: #2, #3, #5,
+#6, #9, #10, #17, #18, #19. To make this possible without changing behavior, two pure helpers were
+extracted — `fixcheck::build_ctx` (fixcheck's prompt-context construction) and
+`main::prior_finding_id` (the `--prior` id-namespacing logic behind #6's fix) — no behavior
+change, existing logic made directly testable.
+
+#4 and #7 are explicitly out of scope for direct testing: both are `main.rs` call-ordering bugs
+(console vs. `report.md` computed from different snapshots; `requirements::verify` running before
+the `--prior` merge) that would need mocking the `Llm` subprocess/network boundary to exercise
+directly. Covered indirectly instead: `quantify.rs`'s `score_before_and_after_prior_merge_can_differ`
+test asserts the underlying invariant #4's fix depends on.
+
+## Versioning — CHANGELOG.md and v0.1.0 (#24)
+
+#24 (`67d90fd`) added `CHANGELOG.md` (Keep a Changelog format), covering every fix from #2 through
+#19, and the repository was tagged
+[`v0.1.0`](https://github.com/Loop-Suite/Marketing-Loop/releases/tag/v0.1.0).
+
+**The tag is stale relative to `main` as of this writing.** `git log v0.1.0..main` shows two
+commits not in the tagged release:
+
+```
+34ed6f3 Use counts_toward_score for --prior fix-check carry-over (#28)
+75981fe Pass content_type into lens selection (#26)
+```
+
+`75981fe` (#26, fixes #25) and `34ed6f3` (#28, fixes #27) both landed *after* the tag was cut, as
+part of the execution-validation pass below. **`v0.1.0` does not include the lens-selection
+content-type fix (#25) or the `--prior` cross-round tracking fix (#27)** — both exist only on
+`main`. Anyone deploying from the `v0.1.0` tag rather than `main` HEAD is running code with the
+#25 crash and the #27 tracking gap still present.
+
+## Round 5 — real execution validation, take 2 (#25, #27)
+
+A second real-execution pass, chaining two rounds together with `--prior` against
+`examples/sample_ad_copy.md` (`--backend claude-cli --model haiku`), run specifically to check
+whether #17's fix (Round 4, above) holds up on real model output and not just in a unit test.
+
+- **Round A crashed on the first attempt — before #17 could even be exercised.**
+  `lens::select_lenses`'s own prompt asks the model to pick lenses fitting "the content type and
+  its nature," but the function has no `content_type`/`Input` parameter at all — `main.rs` had
+  the value available and never passed it through. `haiku` didn't paper over the gap the way
+  whatever model ran the earlier rounds apparently had: it noticed the prompt referenced
+  information it was never given and refused to guess, surfacing as a hard `Lens selection
+  failed` error instead of a silently arbitrary lens selection. Filed as
+  [#25](https://github.com/Loop-Suite/Marketing-Loop/issues/25), fixed in `75981fe`/#26 (passes
+  `content_type` through, extracts `build_selection_task()` so the prompt construction is
+  directly unit-tested), rebuilt, rerun.
+- **Round A, rerun, succeeded and validated #17 on real output.** Score 76/100 (verdict COMMENT).
+  Two `claims_compliance` findings (`claims_compliance-1`, `claims_compliance-2`, both P1,
+  flagging unsubstantiated efficacy claims in the fixture's headline/body) were discourse-
+  `CONNECT`ed into each other in discourse round 2 — and, per #17's fix, both still appear in the
+  main Findings table and both still deduct from the score (-12 each: 100 → 76), because
+  `claims_compliance` is `tier = "blocking"`. In the same run, non-blocking-tier `CONNECT`s
+  (`conversion_cro`/`copy_craft`/`brand_voice` findings merged over a placeholder-text defect and
+  an unsupported-statistic defect) behaved exactly as before #17: visible only in the Merged
+  Findings section, no score impact. Both halves of #17's trade-off confirmed on a real model
+  output, not just a unit test.
+- **Round B (`--prior` round A's directory, same unmodified content) also succeeded**: score
+  63/100, verdict REQUEST_CHANGES, console and `report.md` verdict/score matched exactly.
+- **Round B surfaced a new bug: #27.** Round A's two blocking-tier `claims_compliance` findings
+  scored via `MERGED` status, not `CONFIRMED` — but `main.rs`'s `--prior` fix-check carry-over
+  filter still checked for the literal string `"CONFIRMED"`, so those findings were invisible to
+  `fixcheck::run` in round B: never checked for FIXED/STILL_OPEN, and no `## Vs. previous round`
+  section rendered at all, despite round A having two real, score-affecting compliance findings
+  that should have carried forward. Round B's own independent lens review happened to re-flag the
+  same underlying defects on its own (hence it still landed on REQUEST_CHANGES) — but that's
+  luck, not the tracking mechanism working; a revision that reworded around fresh detection while
+  leaving the actual violation unaddressed would have lost continuity entirely. Filed as
+  [#27](https://github.com/Loop-Suite/Marketing-Loop/issues/27), fixed in `34ed6f3`/#28 by
+  swapping the literal status check for `quantify::counts_toward_score` (the same predicate #17
+  added), covered by a regression test. **No further paid run was made to re-validate #27's
+  fix** — the fix is unit-tested but not re-confirmed against another live chained run.
+
+**Cost**: 2 rounds, 15 LLM calls total, **$0.7754** (round A $0.3907, round B $0.3847), both
+`--backend claude-cli --model haiku`. Read directly off console output during the session; not
+saved to a log file in this repo snapshot (same caveat as round1_synth's cost below).
+
 ## Cost
 
 | Item | Calls | Cost |
@@ -216,9 +359,16 @@ Recorded here as a real, measured gap rather than guessed at or silently patched
 | **4 successful runs, total (direct console readout)** | | **$0.7205** |
 | *(round1_synth's individual cost, by subtraction — not independently logged)* | | *($0.2272)* |
 | 3 crash-and-retry runs while triaging #9/#10 | unknown | not printed (crashed before the cost line) |
-| **Overall estimate, all 7 attempts** | | **~$1.0–$1.2 (uncertain)** |
+| **Overall estimate, initial validation pass, all 7 attempts** | | **~$1.0–$1.2 (uncertain)** |
+| round A (production-hardening, take 2) | part of 15 total | $0.3907 |
+| round B (production-hardening, take 2) | part of 15 total | $0.3847 |
+| **Production-hardening round 5, total (2 rounds)** | **15** | **$0.7754** |
+| **Grand total, all execution-validation spend, both passes** | | **~$1.78–$1.98** |
 
-All calls used `--backend claude --model haiku`. The $0.7205 total for the 4 successful runs is an
-exact sum of console-reported costs. The 3 crash runs never reached the point where the CLI prints
-its cost line, so their contribution to the overall total is an estimate, not a measurement —
-stated as a range rather than a false-precision single number.
+All calls used `--model haiku` (initial pass: `--backend claude`; round 5: `--backend
+claude-cli`). The $0.7205 total for the first pass's 4 successful runs is an exact sum of
+console-reported costs; the $0.7754 total for round 5 is read
+directly off console output during the session (not saved to a log file in this repo snapshot).
+The 3 crash runs from the initial pass never reached the point where the CLI prints its cost
+line, so their contribution to that subtotal is an estimate, not a measurement — stated as a
+range rather than a false-precision single number.
