@@ -200,6 +200,28 @@ pub fn write_review(
         md.push('\n');
     }
 
+    // MERGED findings are excluded from the main Findings table (only CONFIRMED is shown there)
+    // but discourse.rs's own comment says a merged finding "stays in the findings list,
+    // cross-referenced" — so it needs somewhere to actually be visible, same as Rejected/Uncertain.
+    let merged: Vec<&Finding> = findings
+        .iter()
+        .filter(|f| resolved.get(&f.id).map(|r| r.status.as_str()) == Some("MERGED"))
+        .collect();
+    if !merged.is_empty() {
+        md.push_str("### Merged Findings\n\n");
+        for f in &merged {
+            let cross_ref = resolved
+                .get(&f.id)
+                .map(|r| r.evidence.as_str())
+                .unwrap_or("");
+            md.push_str(&format!(
+                "- {} ({}) — {} — {}\n",
+                f.id, f.block_ref, f.claim, cross_ref
+            ));
+        }
+        md.push('\n');
+    }
+
     let uncertain: Vec<&Finding> = findings
         .iter()
         .filter(|f| resolved.get(&f.id).map(|r| r.status.as_str()) == Some("UNCERTAIN"))
