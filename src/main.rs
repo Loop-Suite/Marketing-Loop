@@ -364,9 +364,19 @@ fn run_review(
             for item in &fr {
                 if item.status == "STILL_OPEN" {
                     if let Some(orig) = prior_confirmed.iter().find(|f| f.id == item.finding_id) {
-                        findings.push((*orig).clone());
+                        // Finding ids are generated per-round from scratch (lens id + position
+                        // within *this round's* own list — see lens::review_lens), so a carried-over
+                        // prior finding can collide with a fresh finding the same lens produces this
+                        // round. Namespace it so it can never collide with a same-round-generated id,
+                        // which is always exactly "{lens.id}-{n}" with no "prior-" prefix.
+                        let mut carried = (*orig).clone();
+                        if !carried.id.starts_with("prior-") {
+                            carried.id = format!("prior-{}", carried.id);
+                        }
+                        let carried_id = carried.id.clone();
+                        findings.push(carried);
                         resolved.insert(
-                            orig.id.clone(),
+                            carried_id,
                             discourse::Resolution {
                                 status: "CONFIRMED".to_string(),
                                 evidence: format!(
