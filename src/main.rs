@@ -388,9 +388,10 @@ fn run_review(
     // Human review-comment tone rewrite (optional) — based on the confirmed list after the prior merge.
     // Assumption: the current scaffold has no separate lens/function that generates good things
     // (not included in lens.rs), so good_things is always passed as an empty list.
+    // Includes CONFIRMED findings and blocking-tier MERGED findings (#17) — see quantify::counts_toward_score.
     let confirmed_after_merge: Vec<&Finding> = findings
         .iter()
-        .filter(|f| resolved.get(&f.id).map(|r| r.status.as_str()) == Some("CONFIRMED"))
+        .filter(|f| quantify::counts_toward_score(f, &resolved, &sp))
         .collect();
 
     // Requirements verification — computed after the prior-round merge above, from the same
@@ -401,7 +402,7 @@ fn run_review(
     // Quantitative summary + verdict — computed after the prior-round merge above so the console
     // output matches report.md (report::write_review below recomputes these from the same
     // post-merge findings/resolved/confirmed_after_merge).
-    let score = quantify::score(&findings, &resolved);
+    let score = quantify::score(&findings, &resolved, &sp);
     let verdict = quantify::verdict(&confirmed_after_merge, &policies, &req_results);
 
     let good_things: Vec<humanvoice::GoodThing> = Vec::new();
