@@ -40,9 +40,26 @@ pub struct Finding {
     pub recommendation: String,
 }
 
+/// Builds the lens-selection prompt. Regression guard (#25): this asks the model to pick lenses
+/// fitting "the content type and its nature" — content_type must actually be included, or the
+/// model has no basis to judge fit and (at least with smaller/faster models like haiku) may
+/// refuse to guess instead of silently picking arbitrary lenses.
+fn build_selection_task(spec: &Spec, catalog: &str, content_type: &str) -> String {
+    format!(
+        "# Task\nReferring to the campaign context and content type below, pick 1-3 review lenses that fit the content type and its nature (no swaps after selection).\n\n\
+         ## Campaign context\n{context}\n\n\
+         ## Content type\n{content_type}\n\n\
+         ## Lens candidates\n{catalog}\n\n\
+         ## Output (JSON only)\n{{\"selected\":[\"id\", ...]}}\n",
+        context = spec.context,
+        content_type = content_type,
+        catalog = catalog,
+    )
+}
+
 /// Uses the LLM to select 3-5 lenses fitting the content type's nature from the candidate pool of 7.
 /// Force-including `always` lenses isn't this function's responsibility (merged with spec.always_lenses() in main.rs).
-pub fn select_lenses(llm: &Llm, spec: &Spec) -> Result<Vec<Lens>> {
+pub fn select_lenses(llm: &Llm, spec: &Spec, content_type: &str) -> Result<Vec<Lens>> {
     let optional = spec.optional_lenses();
     if optional.is_empty() {
         return Ok(Vec::new());
@@ -62,14 +79,7 @@ pub fn select_lenses(llm: &Llm, spec: &Spec) -> Result<Vec<Lens>> {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let task = format!(
-        "# Task\nReferring to the campaign context below, pick 1-3 review lenses that fit the content type and its nature (no swaps after selection).\n\n\
-         ## Campaign context\n{context}\n\n\
-         ## Lens candidates\n{catalog}\n\n\
-         ## Output (JSON only)\n{{\"selected\":[\"id\", ...]}}\n",
-        context = spec.context,
-        catalog = catalog,
-    );
+    let task = build_selection_task(spec, &catalog, content_type);
     let v = llm
         .json(&task, Some("You are a marketing lead who only performs lens selection. Respond strictly in the JSON schema."))
         .context("Lens selection failed")?;
@@ -276,7 +286,29 @@ mod tests {
             false,
             Llm::new_usage_tracker(),
         );
-        let selected = select_lenses(&llm, &spec).unwrap();
+        let selected = select_lenses(&llm, &spec, "ad_copy").unwrap();
         assert!(selected.is_empty());
+    }
+
+    /// Regression test for #25: the lens-selection prompt asks the model to pick lenses fitting
+    /// "the content type and its nature" — content_type must actually appear in the built prompt.
+    #[test]
+    fn selection_task_includes_content_type() {
+        let task = build_selection_task(
+            &Spec {
+                name: "t".into(),
+                context: "campaign ctx".into(),
+                lenses: vec![],
+                deterministic_checks: vec![],
+                labels: vec!["l".into()],
+                content_length_limit: 0,
+                disclaimer_required_types: vec![],
+                required_brand_terms: vec![],
+            },
+            "- id=\"seo\" | SEO — selection signal: x",
+            "ad_copy",
+        );
+        assert!(task.contains("ad_copy"));
+        assert!(task.contains("campaign ctx"));
     }
 }
