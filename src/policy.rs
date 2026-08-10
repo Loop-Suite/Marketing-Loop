@@ -86,13 +86,13 @@ pub fn content_length_check(spec: &Spec, input: &Input) -> PolicyResult {
             evidence: "spec.content_length_limit not configured".into(),
         };
     }
-    if input.word_count <= spec.content_length_limit {
+    if input.char_count <= spec.content_length_limit {
         PolicyResult {
             check: "Content length within limit".into(),
             status: PolicyStatus::Pass,
             evidence: format!(
-                "word_count {} <= threshold {}",
-                input.word_count, spec.content_length_limit
+                "char_count {} <= threshold {}",
+                input.char_count, spec.content_length_limit
             ),
         }
     } else {
@@ -100,8 +100,8 @@ pub fn content_length_check(spec: &Spec, input: &Input) -> PolicyResult {
             check: "Content length within limit".into(),
             status: PolicyStatus::Fail,
             evidence: format!(
-                "word_count {} > threshold {}",
-                input.word_count, spec.content_length_limit
+                "char_count {} > threshold {}",
+                input.char_count, spec.content_length_limit
             ),
         }
     }

@@ -23,6 +23,14 @@ pub fn write(out_dir: &Path, state: &State) -> Result<()> {
 }
 
 pub fn load(path: &Path) -> Result<State> {
+    // --prior accepts either a previous --out directory or a direct path to its state.json.
+    let joined;
+    let path: &Path = if path.is_dir() {
+        joined = path.join("state.json");
+        &joined
+    } else {
+        path
+    };
     let s = std::fs::read_to_string(path).with_context(|| {
         format!(
             "Failed to read {} (--prior is the state.json from a previous --out directory)",

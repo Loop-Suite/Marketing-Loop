@@ -340,15 +340,12 @@ fn run_review(
         .collect();
     let req_results = requirements::verify(cheap_llm, &sp, &inp, &confirmed_refs)?;
 
-    // Quantitative summary + verdict + effort/time estimate
-    let score = quantify::score(&findings, &resolved);
-    let verdict = quantify::verdict(&confirmed_refs, &policies, &req_results);
+    // Effort/time estimate (independent of the prior-round merge below).
     let effort = quantify::effort(&inp, selected.len());
     let (best, avg, worst) = quantify::time_estimate(effort);
 
     // Vs. previous round (--prior): determine whether findings confirmed there were fixed in this
     // content. If STILL_OPEN, fold it back into this round's working set.
-    // Note: the score/verdict above are computed before this merge (follows the orchestration instructions' order as-is).
     let (round, fix_results): (usize, Option<Vec<fixcheck::FixResult>>) = match prior {
         None => (0, None),
         Some(p) => {
@@ -363,7 +360,7 @@ fn run_review(
                         .unwrap_or(false)
                 })
                 .collect();
-            let fr = fixcheck::run(cheap_llm, &sp, &prior_confirmed)?;
+            let fr = fixcheck::run(cheap_llm, &sp, &inp.content, &prior_confirmed)?;
             for item in &fr {
                 if item.status == "STILL_OPEN" {
                     if let Some(orig) = prior_confirmed.iter().find(|f| f.id == item.finding_id) {
@@ -392,6 +389,13 @@ fn run_review(
         .iter()
         .filter(|f| resolved.get(&f.id).map(|r| r.status.as_str()) == Some("CONFIRMED"))
         .collect();
+
+    // Quantitative summary + verdict — computed after the prior-round merge above so the console
+    // output matches report.md (report::write_review below recomputes these from the same
+    // post-merge findings/resolved/confirmed_after_merge).
+    let score = quantify::score(&findings, &resolved);
+    let verdict = quantify::verdict(&confirmed_after_merge, &policies, &req_results);
+
     let good_things: Vec<humanvoice::GoodThing> = Vec::new();
     let hv = if human_voice {
         Some(humanvoice::rewrite(

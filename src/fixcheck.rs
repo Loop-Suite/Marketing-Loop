@@ -24,12 +24,10 @@ struct FixCheckOutput {
 /// Determines whether findings confirmed in the previous round (--prior) were actually fixed in this content.
 /// If prior_confirmed is empty, returns an empty result (round 1, or no prior confirmed findings) — LLM call is skipped.
 ///
-/// Note (signature constraint): this scaffold's run() doesn't take Input (the raw content) as an
-/// argument, so shared_context() can't be used. Only spec.context (campaign context) is used as
-/// ctx — the signature is kept as finalized (no changes allowed), so if raw-content comparison is
-/// needed, the higher-level design must be changed to inject the content directly into the task
-/// string at the call site (not workaroundable within this file).
-pub fn run(llm: &Llm, spec: &Spec, prior_confirmed: &[&Finding]) -> Result<Vec<FixResult>> {
+/// `content` is the current (revised) content being reviewed this round — it must be included in
+/// the prompt so the LLM can actually check whether each prior finding was fixed, instead of
+/// judging FIXED/STILL_OPEN/UNKNOWN from the finding list and campaign context alone.
+pub fn run(llm: &Llm, spec: &Spec, content: &str, prior_confirmed: &[&Finding]) -> Result<Vec<FixResult>> {
     if prior_confirmed.is_empty() {
         return Ok(Vec::new());
     }
@@ -38,9 +36,12 @@ pub fn run(llm: &Llm, spec: &Spec, prior_confirmed: &[&Finding]) -> Result<Vec<F
         .map(|f| format!("{} | {} | {} | {}", f.id, f.block_ref, f.claim, f.evidence))
         .collect::<Vec<_>>()
         .join("\n");
-    let ctx = format!("## Campaign context\n{}\n", spec.context);
+    let ctx = format!(
+        "## Campaign context\n{}\n\n## Current content (this round)\n{}\n",
+        spec.context, content
+    );
     let task = format!(
-        "# Task\nDetermine whether the findings confirmed in the previous round below have been fixed in this content.\n\n\
+        "# Task\nDetermine whether the findings confirmed in the previous round below have been fixed in the current content above.\n\n\
          ## Findings confirmed in the previous round (id | block_ref | claim | evidence)\n{list}\n\n\
          ## Output (JSON only, no code fence)\n\
          {{\"results\":[{{\"finding_id\":\"...\",\"status\":\"FIXED|STILL_OPEN|UNKNOWN\",\"evidence\":\"...\"}}]}}\n",
