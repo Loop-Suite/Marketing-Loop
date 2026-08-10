@@ -334,6 +334,29 @@ docs/research-and-evidence-survey-2026-07-29.md   survey of adjacent OSS/marketi
 - `state.json` persists the original 3-field `{round, findings, resolved}` schema; the expanded schema proposed in `docs/design-spec.md` §6 (`run_id`, `timestamp`, `discourse_log`, ...) was not implemented in `state.rs`.
 - `report.rs`'s Good Things section is hardcoded to "not observed" — nothing in the current pipeline populates `humanvoice::GoodThing` values, even though the struct exists.
 
+## Real-world validation
+
+The pipeline above wasn't just read, it was reviewed and then actually run. Three rounds (two
+static code-reading passes, one round of real `codereview review` executions against a synthetic
+ad-copy fixture) found **9 issues, all fixed**, for a real total cost of **~$1.0–$1.2**. Every
+number is read off actual CLI cost output or computed from a saved `report.md` — nothing
+estimated from memory.
+
+The two findings worth calling out:
+
+- **A finding-id collision silently distorted the verdict.** A round's own local finding id could
+  collide with a re-confirmed `--prior` finding's id, letting a `REJECTED` finding get resurrected
+  as `CONFIRMED` and double-counted into the score — a run that should have scored 95 scored 90
+  instead.
+- **The MERGED-findings feature had never once actually worked.** `report.md`'s "Merged Findings"
+  section rendered correctly from the day it was added, but the underlying `CONNECT` move that was
+  supposed to populate it never matched anything, because the model returns multiple target
+  finding ids as one comma-joined string against a field typed to hold only one. The section
+  looked correct and was silently empty in every real run until this was found.
+
+Full methodology, every raw number, and everything else that went wrong along the way:
+[evals/README.md](evals/README.md).
+
 ## License
 
 No license file is included in this repository as of this snapshot.
