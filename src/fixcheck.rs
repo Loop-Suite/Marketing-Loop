@@ -27,7 +27,12 @@ struct FixCheckOutput {
 /// `content` is the current (revised) content being reviewed this round — it must be included in
 /// the prompt so the LLM can actually check whether each prior finding was fixed, instead of
 /// judging FIXED/STILL_OPEN/UNKNOWN from the finding list and campaign context alone.
-pub fn run(llm: &Llm, spec: &Spec, content: &str, prior_confirmed: &[&Finding]) -> Result<Vec<FixResult>> {
+pub fn run(
+    llm: &Llm,
+    spec: &Spec,
+    content: &str,
+    prior_confirmed: &[&Finding],
+) -> Result<Vec<FixResult>> {
     if prior_confirmed.is_empty() {
         return Ok(Vec::new());
     }
