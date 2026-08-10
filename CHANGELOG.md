@@ -5,6 +5,29 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-08-10
+
+Patch release covering bugs found by a real-execution review pass (haiku backend,
+`--prior`-chained rounds) run against the v0.1.0 tag; see `evals/README.md` for the full
+account.
+
+### Fixed
+
+- [#25](https://github.com/Loop-Suite/Marketing-Loop/issues/25) `select_lenses`'s own prompt
+  asked the model to pick lenses fitting "the content type and its nature" but `content_type`
+  was never actually passed into the prompt-construction call, even though `main.rs` had it
+  available. A capable model can sometimes paper over the gap; a weaker one (haiku) correctly
+  refused to guess, surfacing as a hard "Lens selection failed" crash instead of a silently
+  arbitrary lens selection.
+- [#27](https://github.com/Loop-Suite/Marketing-Loop/issues/27) The `--prior` fix-check
+  carry-over filter checked for a literal `CONFIRMED` status, so blocking-tier `MERGED` findings
+  (which #17 already made score/verdict-relevant in 0.1.0) were invisible to `fixcheck::run` and
+  silently dropped from cross-round tracking instead of being re-checked. The filter now uses
+  `quantify::counts_toward_score`, the same predicate #17 uses for score/verdict, so cross-round
+  tracking stays consistent with whatever a round's own numbers actually counted.
+
+[0.1.1]: https://github.com/Loop-Suite/Marketing-Loop/releases/tag/v0.1.1
+
 ## [0.1.0] - 2026-08-10
 
 Initial tagged release. `marketing-loop` is a Rust CLI port of
